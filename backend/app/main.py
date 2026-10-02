@@ -74,6 +74,21 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
+@app.get("/")
+async def root():
+    """Welcome endpoint for root URL."""
+    return {
+        "status": "online",
+        "service": "PrismGuard AI — Security Gateway",
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/health",
+            "docs": "/docs",
+            "chat": "/api/chat"
+        }
+    }
+
+
 # Include API route modules
 app.include_router(chat_router)
 app.include_router(research_router)
