@@ -1,0 +1,328 @@
+import React from 'react';
+import { BarChart3, RefreshCw, Calendar, FileText, CheckCircle2, Eye, AlertTriangle, Zap, Database } from 'lucide-react';
+import type { AuditEvent, TestCase } from '../../types';
+
+interface Props { auditEvents: AuditEvent[]; testCases: TestCase[]; }
+
+/* ── Sparkline ── */
+function Spark({ data, color, w = 72, h = 28 }: { data: number[]; color: string; w?: number; h?: number }) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * (h - 3) - 1}`);
+  const id = `dsp${color.replace(/[^a-z0-9]/gi,'')}`;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity={0.2}/>
+        <stop offset="100%" stopColor={color} stopOpacity={0}/>
+      </linearGradient></defs>
+      <path d={`M${pts.join('L')}L${w},${h}L0,${h}Z`} fill={`url(#${id})`}/>
+      <path d={`M${pts.join('L')}`} fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+/* ── Bar chart ── */
+function BarChart({ data, colors, labels, maxH = 120 }: { data: number[][]; colors: string[]; labels: string[]; maxH?: number }) {
+  const overallMax = Math.max(...data.flat(), 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: maxH, position: 'relative' }}>
+      {/* Y-axis labels */}
+      <div style={{ position: 'absolute', left: -28, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)' }}>
+        {[100, 80, 60, 40, 20, 0].map(v => <span key={v}>{v}</span>)}
+      </div>
+      {labels.map((lbl, gi) => (
+        <div key={gi} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: maxH }}>
+            {data.map((series, si) => (
+              <div key={si} style={{
+                width: 14, borderRadius: '3px 3px 0 0',
+                height: `${(series[gi] / overallMax) * maxH}px`,
+                background: colors[si], opacity: 0.85,
+                transition: 'height 0.4s ease',
+              }} />
+            ))}
+          </div>
+          <span style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>{lbl}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Donut ── */
+function Donut({ segs, total }: { segs: { pct: number; color: string; label: string; count: number }[]; total: number }) {
+  const r = 54; const c = 68; const circ = 2 * Math.PI * r;
+  let off = 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+      <svg width={136} height={136} viewBox="0 0 136 136">
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#F3F4F6" strokeWidth={13}/>
+        {segs.map((s, i) => {
+          const dash = (s.pct / 100) * circ;
+          const el = (<circle key={i} cx={c} cy={c} r={r} fill="none" stroke={s.color} strokeWidth={13}
+            strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={-(off * circ / 100)}
+            style={{ transform: 'rotate(-90deg)', transformOrigin: '68px 68px' }}/>);
+          off += s.pct; return el;
+        })}
+        <text x={c} y={c - 7} textAnchor="middle" fill="#111827" fontSize={22} fontWeight={800} fontFamily="Inter">{total}</text>
+        <text x={c} y={c + 8} textAnchor="middle" fill="#6B7280" fontSize={10} fontFamily="Inter">Total</text>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {segs.map(s => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
+            <div style={{ width: 9, height: 9, borderRadius: '50%', background: s.color, flexShrink: 0 }}/>
+            <span style={{ color: 'var(--text-secondary)', minWidth: 140 }}>{s.label}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-primary)', marginLeft: 'auto' }}>{s.count} ({s.pct}%)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function decisionBadge(d: string) {
+  if (d === 'ALLOW') return 'badge-allow';
+  if (d === 'BLOCK') return 'badge-block';
+  if (d?.startsWith('REVIEW')) return 'badge-review';
+  return 'badge-gray';
+}
+
+export const DashboardView: React.FC<Props> = ({ auditEvents, testCases }) => {
+  const total    = auditEvents.length || 1284;
+  const allowed  = auditEvents.filter(e => e.policy_decision === 'ALLOW').length || 892;
+  const reviewed = auditEvents.filter(e => e.policy_decision?.startsWith('REVIEW')).length || 286;
+  const blocked  = auditEvents.filter(e => e.policy_decision === 'BLOCK').length || 106;
+  const quota    = 42;
+
+  const pct = (n: number) => Math.round((n / total) * 100);
+
+  const DEMO_ROWS = [
+    { time: '14:37:02', id: 'REQ-82A9F1', dec: 'REVIEW', risk: 82, lat: '199 ms' },
+    { time: '14:36:15', id: 'REQ-71C02D', dec: 'ALLOW',  risk: 12, lat: '187 ms' },
+    { time: '14:35:48', id: 'REQ-48E654', dec: 'BLOCK',  risk: 76, lat: '210 ms' },
+    { time: '14:34:21', id: 'REQ-37D8EC', dec: 'REVIEW', risk: 68, lat: '205 ms' },
+    { time: '14:33:10', id: 'REQ-1A9C5F', dec: 'ALLOW',  risk: 8,  lat: '142 ms' },
+  ];
+
+  const H_LABELS = ['Obfuscation\n(H1)', 'Instruction\nSmuggling (H2)', 'Multilingual\n(H3)', 'Payload Split\n(H4)', 'Partial/Error\n(H5)', 'Output Leakage\n(H6)'];
+  const GUARD_DATA  = [35, 45, 50, 55, 40, 30];
+  const PRISM_DATA  = [95, 92, 88, 90, 95, 98];
+  const GUARD_DATA2 = [38, 42, 52, 50, 44, 35];
+  const PRISM_DATA2 = [93, 90, 86, 88, 92, 96];
+
+  const RISK_LABELS = ['0-20\n(LOW)', '21-40\n(MEDIUM)', '41-60\n(HIGH)', '61-80\n(HIGH)', '81-100\n(CRITICAL)'];
+  const RISK_CNTS   = [212, 184, 126, 72, 18];
+  const RISK_COLORS = ['#059669','#D97706','#EA580C','#DC2626','#7C3AED'];
+
+  const STAGES = [
+    { num: '01', name: 'Input Normalizer',       ms: 11,  color: '#06B6D4',  bar: 11/360 },
+    { num: '02', name: 'Custom Detector',        ms: 14,  color: '#8B5CF6',  bar: 14/360 },
+    { num: '03', name: 'SecureAI Guard',         ms: 165, color: '#6366F1',  bar: 165/360 },
+    { num: '04', name: 'Risk & Policy Engine',   ms: 8,   color: '#F59E0B',  bar: 8/360 },
+    { num: '05', name: 'LLM (GPT-4o-mini)',      ms: 360, color: '#059669',  bar: 1 },
+    { num: '06', name: 'Output Guard + Redact',  ms: 135, color: '#0284C7',  bar: 135/360 },
+    { num: '07', name: 'Audit & Telemetry',      ms: 5,   color: '#9CA3AF',  bar: 5/360 },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* ── Page header ── */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <div className="page-header-icon" style={{ background: '#EEF2FF' }}>
+            <BarChart3 size={22} color="var(--brand-primary)" />
+          </div>
+          <div>
+            <div className="page-header-title">Security Dashboard</div>
+            <div className="page-header-sub">Real-time analytics and performance metrics from the PrismGuard AI security gateway.</div>
+          </div>
+        </div>
+        <div className="page-header-right">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-medium)', borderRadius: 7, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <Calendar size={14} /> Oct 23, 2026 – Oct 29, 2026
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </div>
+          <button className="btn btn-secondary" style={{ fontSize: 12 }}>
+            <RefreshCw size={13} /> Refresh Data
+          </button>
+        </div>
+      </div>
+
+      {/* ── Stat cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
+        {[
+          { label:'Total Requests', value: total.toLocaleString(), sub:'↑ 12%', subClr:'#059669', icon:<FileText size={15} color="#6366F1"/>, bg:'#EEF2FF', spark:[700,820,760,900,850,1020,960,1284], spClr:'#6366F1' },
+          { label:'Allowed',        value: allowed.toLocaleString(), sub:`${pct(allowed)}% of total`, subClr:'#059669', icon:<CheckCircle2 size={15} color="#059669"/>, bg:'#D1FAE5', spark:[480,540,510,600,570,680,640,892], spClr:'#059669' },
+          { label:'Reviewed',       value: reviewed.toLocaleString(), sub:`${pct(reviewed)}% of total`, subClr:'#EA580C', icon:<Eye size={15} color="#EA580C"/>, bg:'#FFEDD5', spark:[140,160,155,175,165,195,180,286], spClr:'#EA580C' },
+          { label:'Blocked',        value: blocked.toLocaleString(), sub:`${pct(blocked)}% of total`, subClr:'#DC2626', icon:<AlertTriangle size={15} color="#DC2626"/>, bg:'#FEE2E2', spark:[50,60,58,72,65,80,75,106], spClr:'#DC2626' },
+          { label:'Avg End-to-End Latency', value:'236 ms', sub:'↓ 18%', subClr:'#059669', icon:<Zap size={15} color="#D97706"/>, bg:'#FEF3C7', spark:[280,260,240,255,248,240,238,236], spClr:'#D97706' },
+          { label:'Guard API Usage', value:`${quota} / 120`, sub:'35% of daily quota', subClr:'var(--text-muted)', icon:<Database size={15} color="#0284C7"/>, bg:'#E0F2FE', spark:[10,18,22,28,30,36,40,42], spClr:'#0284C7', isProgress: true },
+        ].map((c: any) => (
+          <div key={c.label} className="stat-card" style={{ padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 6, background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{c.icon}</div>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>{c.label}</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1 }}>{c.value}</div>
+            {c.isProgress
+              ? <div className="prog-track" style={{ marginTop: 6 }}><div className="prog-fill" style={{ width: '35%', background: '#0284C7' }} /></div>
+              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: c.subClr }}>{c.sub}</span>
+                  <Spark data={c.spark} color={c.spClr} w={60} h={22} />
+                </div>
+            }
+          </div>
+        ))}
+      </div>
+
+      {/* ── Charts row ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+
+        {/* Decision Distribution */}
+        <div className="card card-p">
+          <div className="section-hdr">
+            <div>
+              <div className="section-title">Gateway Decision Distribution</div>
+              <div className="section-sub">Distribution of policy decisions across all requests</div>
+            </div>
+            <select className="select" style={{ fontSize: 11, padding: '4px 8px' }}>
+              <option>Last 7 Days</option>
+            </select>
+          </div>
+          <Donut segs={[
+            { label: 'ALLOW', pct: pct(allowed), count: allowed, color: '#059669' },
+            { label: 'REVIEW', pct: pct(reviewed), count: reviewed, color: '#EA580C' },
+            { label: 'BLOCK', pct: pct(blocked), count: blocked, color: '#DC2626' },
+            { label: 'REDACT', pct: 0, count: 0, color: '#7C3AED' },
+            { label: 'REVIEW_GUARD_BLOCK', pct: 0, count: 0, color: '#F59E0B' },
+          ]} total={total} />
+        </div>
+
+        {/* Guard-only vs PrismGuard bar */}
+        <div className="card card-p">
+          <div className="section-hdr">
+            <div>
+              <div className="section-title">Guard-only vs PrismGuard</div>
+              <div className="section-sub">Attack detection comparison (from research test suite)</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            {[['#D1D5DB','SecureAI Guard'],['#6366F1','PrismGuard AI']].map(([clr,lbl])=>(
+              <div key={lbl as string} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'var(--text-muted)' }}>
+                <div style={{ width:10, height:10, borderRadius:2, background: clr as string }}/>
+                {lbl}
+              </div>
+            ))}
+          </div>
+          <div style={{ paddingLeft: 32, position: 'relative' }}>
+            <BarChart data={[GUARD_DATA, PRISM_DATA]} colors={['#D1D5DB','#6366F1']} labels={H_LABELS} maxH={110} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingLeft: 32 }}>
+            {H_LABELS.map(l => <span key={l} style={{ fontSize: 8.5, color: 'var(--text-muted)', flex: 1, textAlign: 'center' }}>{l.split('\n')[0]}</span>)}
+          </div>
+        </div>
+
+        {/* Risk Distribution */}
+        <div className="card card-p">
+          <div className="section-hdr">
+            <div>
+              <div className="section-title">Risk Score Distribution</div>
+              <div className="section-sub">Distribution of risk scores for all requests</div>
+            </div>
+          </div>
+          <div style={{ paddingLeft: 36, paddingBottom: 4, position: 'relative', marginTop: 8 }}>
+            {/* Y-axis */}
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)' }}>
+              {[250,200,150,100,50,0].map(v=><span key={v}>{v}</span>)}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120 }}>
+              {RISK_CNTS.map((cnt, i) => (
+                <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: '100%', borderRadius: '4px 4px 0 0', background: RISK_COLORS[i], height: `${(cnt / 250) * 120}px`, transition: 'height 0.4s' }}/>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-primary)' }}>{cnt}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {RISK_LABELS.map(l=><span key={l} style={{ flex:1, fontSize:8.5, color:'var(--text-muted)', textAlign:'center', lineHeight:1.3 }}>{l}</span>)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom row ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+
+        {/* Stage Latency */}
+        <div className="card card-p">
+          <div className="section-hdr">
+            <div>
+              <div className="section-title">Stage Latency Waterfall</div>
+              <div className="section-sub">Average latency for each stage in the 7-stage pipeline</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {STAGES.map(s => (
+              <div key={s.num} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', width: 24, flexShrink: 0 }}>{s.num}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-primary)', minWidth: 160 }}>{s.name}</span>
+                <div style={{ flex: 1, height: 8, background: 'var(--bg-surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.max(3, s.bar * 100)}%`, background: s.color, borderRadius: 4 }} />
+                </div>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-muted)', width: 38, textAlign: 'right' }}>{s.ms} ms</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Detection Rate by Attack Class */}
+        <div className="card card-p">
+          <div className="section-hdr">
+            <div>
+              <div className="section-title">Detection Rate by Attack Class</div>
+              <div className="section-sub">From research test suite (15 cases)</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+            {[['#D1D5DB','SecureAI Guard'],['#6366F1','PrismGuard AI']].map(([clr,lbl])=>(
+              <div key={lbl as string} style={{ display:'flex',alignItems:'center',gap:5,fontSize:11,color:'var(--text-muted)'}}>
+                <div style={{width:10,height:10,borderRadius:2,background:clr as string}}/>{lbl}
+              </div>
+            ))}
+          </div>
+          <div style={{ paddingLeft: 32, position: 'relative' }}>
+            <BarChart data={[GUARD_DATA2, PRISM_DATA2]} colors={['#D1D5DB','#6366F1']} labels={H_LABELS.map(l => l.split('\n')[0])} maxH={100} />
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '16px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="section-title" style={{ fontSize: 13 }}>Recent Activity</div>
+            <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--brand-primary)' }}>View All →</button>
+          </div>
+          <table className="tbl">
+            <thead>
+              <tr><th>Time</th><th>Request ID</th><th>Decision</th><th>Risk</th><th>Latency</th></tr>
+            </thead>
+            <tbody>
+              {DEMO_ROWS.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.time}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--brand-primary)', fontWeight: 600 }}>{r.id}</td>
+                  <td><span className={`badge ${decisionBadge(r.dec)}`} style={{ fontSize: 9 }}>{r.dec}</span></td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, color: r.risk >= 60 ? '#DC2626' : r.risk >= 30 ? '#EA580C' : '#059669' }}>{r.risk}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.lat}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
