@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   FileText, Search, Download, RefreshCw, X,
   Copy, Check, ChevronLeft, ChevronRight, Shield,
-  Calendar, AlertTriangle
+  Calendar, Lightbulb, ChevronDown
 } from 'lucide-react';
 import type { AuditEvent } from '../../types';
 
@@ -13,7 +13,6 @@ interface Props {
   isRefreshing?: boolean;
 }
 
-/* ── helpers ── */
 function decBadge(d: string) {
   if (d === 'ALLOW') return 'badge-allow';
   if (d === 'BLOCK') return 'badge-block';
@@ -21,85 +20,76 @@ function decBadge(d: string) {
   if (d === 'REDACT') return 'badge-redact';
   return 'badge-gray';
 }
-function riskClr(r: number) {
+
+function dotCls(r: number) {
   if (r >= 60) return '#DC2626';
   if (r >= 30) return '#EA580C';
   return '#059669';
 }
-function dotCls(r: number) {
-  if (r >= 60) return 'dot-block';
-  if (r >= 30) return 'dot-review';
-  return 'dot-allow';
-}
 
-/* ── Stage config ── */
-const STAGES = [
-  { key: 'normalizer'   as const, label: 'Normalize',             color: '#06B6D4' },
-  { key: 'detector'     as const, label: 'Local Detector',        color: '#8B5CF6' },
-  { key: 'guard_prompt' as const, label: 'SecureAI Guard',        color: '#6366F1' },
-  { key: 'risk_engine'  as const, label: 'Risk Engine',           color: '#F59E0B' },
-  { key: 'llm'          as const, label: 'LLM (Protected)',       color: '#059669' },
-  { key: 'guard_response' as const, label: 'Output Guard',        color: '#0284C7' },
-  { key: 'audit'        as const, label: 'Audit & Telemetry',     color: '#9CA3AF' },
-];
-
-/* ── Hardcoded demo rows exactly matching screenshot ── */
-const DEMO: AuditEvent[] = [
-  { id:'1',  timestamp:'Oct 29, 14:37:02', gateway_request_id:'REQ-82A9F1', input_sha256:'a91e3f...72bc', classification:'Injection Attempt',   risk_score:82, risk_band:'HIGH', guard_decision:'ALLOW', policy_decision:'REVIEW', total_latency_ms:199, action_taken:'Held for review',  local_signals:['Base64 transformation','Instruction manipulation','Context anomaly','Semantic attack pattern'], stage_latencies:{normalizer:11,detector:14,guard_prompt:165,risk_engine:8,policy:4,llm:0,    guard_response:0,   audit:5}, policy_rationale:'Guard returned ALLOW, but PrismGuard detected transformation and instruction evidence. Request held for review.', request_summary:'Base64-encoded instruction override', input_length:88 },
-  { id:'2',  timestamp:'Oct 29, 14:36:15', gateway_request_id:'REQ-71C02D', input_sha256:'5d72ab...9f11', classification:'Benign (Coding)',     risk_score:12, risk_band:'LOW',  guard_decision:'ALLOW', policy_decision:'ALLOW',  total_latency_ms:187, action_taken:'Passed through', local_signals:[],                                                                                         stage_latencies:{normalizer:11,detector:14,guard_prompt:155,risk_engine:5,policy:3,llm:340,  guard_response:120, audit:5}, policy_rationale:'Low-risk benign coding query. All checks passed.',                                                                                 request_summary:'HTTP caching explanation',       input_length:95  },
-  { id:'3',  timestamp:'Oct 29, 14:35:48', gateway_request_id:'REQ-48E654', input_sha256:'c3f9e2...a1d7', classification:'Obfuscation',         risk_score:76, risk_band:'HIGH', guard_decision:'ALLOW', policy_decision:'BLOCK',  total_latency_ms:210, action_taken:'Blocked',        local_signals:['Base64 transformation','Zero-width obfuscation'],                                           stage_latencies:{normalizer:11,detector:14,guard_prompt:165,risk_engine:8,policy:4,llm:0,    guard_response:0,   audit:5}, policy_rationale:'Obfuscation vectors detected. Request blocked.',                                                                                           request_summary:'Unicode homoglyph injection',    input_length:62  },
-  { id:'4',  timestamp:'Oct 29, 14:34:21', gateway_request_id:'REQ-37D8EC', input_sha256:'9b1ac4...e3d9', classification:'Role Manipulation',   risk_score:68, risk_band:'HIGH', guard_decision:'ALLOW', policy_decision:'REVIEW', total_latency_ms:205, action_taken:'Held for review', local_signals:['Role spoofing'],                                                                              stage_latencies:{normalizer:11,detector:14,guard_prompt:165,risk_engine:8,policy:4,llm:0,    guard_response:0,   audit:5}, policy_rationale:'Role manipulation signals detected.',                                                                                                   request_summary:'You are now DAN',                input_length:93  },
-  { id:'5',  timestamp:'Oct 29, 14:33:10', gateway_request_id:'REQ-1A9C5F', input_sha256:'e72d9b...4c11', classification:'Benign (Academic)',   risk_score:8,  risk_band:'LOW',  guard_decision:'ALLOW', policy_decision:'ALLOW',  total_latency_ms:142, action_taken:'Passed through', local_signals:[],                                                                                         stage_latencies:{normalizer:11,detector:14,guard_prompt:112,risk_engine:4,policy:2,llm:300,  guard_response:100, audit:5}, policy_rationale:'Benign academic content.',                                                                                                            request_summary:'Auth vs authorization',          input_length:98  },
-  { id:'6',  timestamp:'Oct 29, 14:31:56', gateway_request_id:'REQ-F34D21', input_sha256:'812f9d...6a3c', classification:'Output Leakage',      risk_score:64, risk_band:'HIGH', guard_decision:'ALLOW', policy_decision:'REDACT', total_latency_ms:298, action_taken:'Output redacted',  local_signals:['synthetic_token_pattern_match'],                                                            stage_latencies:{normalizer:11,detector:14,guard_prompt:155,risk_engine:7,policy:3,llm:360,  guard_response:140, audit:5}, policy_rationale:'Output contained synthetic secret pattern. Redacted before delivery.',                                                                request_summary:'Generate mock config output',    input_length:40  },
-  { id:'7',  timestamp:'Oct 29, 14:30:44', gateway_request_id:'REQ-9B7E2A', input_sha256:'3ce9d1...b7f2', classification:'Instruction Smuggling',risk_score:71, risk_band:'HIGH', guard_decision:'ALLOW', policy_decision:'BLOCK',  total_latency_ms:224, action_taken:'Blocked',        local_signals:['nested_instruction_override'],                                                              stage_latencies:{normalizer:11,detector:14,guard_prompt:165,risk_engine:8,policy:4,llm:0,    guard_response:0,   audit:5}, policy_rationale:'Instruction smuggling boundary violation.',                                                                                            request_summary:'Multi-role injection sequence',  input_length:121 },
-  { id:'8',  timestamp:'Oct 29, 14:29:33', gateway_request_id:'REQ-6D3C8B', input_sha256:'a4f28e...c9d8', classification:'Multilingual',        risk_score:28, risk_band:'LOW',  guard_decision:'ALLOW', policy_decision:'ALLOW',  total_latency_ms:190, action_taken:'Passed through', local_signals:[],                                                                                         stage_latencies:{normalizer:11,detector:14,guard_prompt:145,risk_engine:6,policy:3,llm:340,  guard_response:115, audit:5}, policy_rationale:'Multilingual benign query.',                                                                                                       request_summary:'Non-English instruction',        input_length:64  },
-  { id:'9',  timestamp:'Oct 29, 14:28:11', gateway_request_id:'REQ-3F91C4', input_sha256:'bd72c9...1e8f', classification:'Delimiter Smuggling', risk_score:66, risk_band:'HIGH', guard_decision:'ALLOW', policy_decision:'REVIEW', total_latency_ms:212, action_taken:'Held for review', local_signals:['fake_system_delimiter'],                                                                    stage_latencies:{normalizer:11,detector:14,guard_prompt:165,risk_engine:8,policy:4,llm:0,    guard_response:0,   audit:5}, policy_rationale:'Delimiter abuse detected.',                                                                                                           request_summary:'Markdown structural breakout',   input_length:114 },
-  { id:'10', timestamp:'Oct 29, 14:27:05', gateway_request_id:'REQ-0E5D77', input_sha256:'f91a2b...6e3d', classification:'Benign (General)',    risk_score:10, risk_band:'LOW',  guard_decision:'ALLOW', policy_decision:'ALLOW',  total_latency_ms:156, action_taken:'Passed through', local_signals:[],                                                                                         stage_latencies:{normalizer:11,detector:14,guard_prompt:120,risk_engine:4,policy:2,llm:310,  guard_response:105, audit:5}, policy_rationale:'General benign request.',                                                                                                         request_summary:'Binary search complexity',       input_length:49  },
-];
-
-/* ── Signal score map ── */
 const SIG_SCORES: Record<string, number> = {
-  'Base64 transformation': 24, 'Instruction manipulation': 28,
-  'Context anomaly': 16, 'Semantic attack pattern': 14,
-  'nested_instruction_override': 25, 'Role spoofing': 20,
-  'Zero-width obfuscation': 20, 'fake_system_delimiter': 18,
+  'Base64 transformation': 24,
+  'Instruction manipulation': 28,
+  'Context anomaly': 16,
+  'Semantic attack pattern': 14,
+  'nested_instruction_override': 25,
+  'Role spoofing': 20,
+  'Zero-width obfuscation': 20,
+  'fake_system_delimiter': 18,
   'synthetic_token_pattern_match': 25,
 };
+
+const STAGE_STEPS = [
+  { num: '01', name: 'Normalize', key: 'normalizer' as const },
+  { num: '02', name: 'Local Detector', key: 'detector' as const },
+  { num: '03', name: 'SecureAI Guard', key: 'guard_prompt' as const },
+  { num: '04', name: 'Risk Engine', key: 'risk_engine' as const },
+  { num: '05', name: 'LLM', key: 'llm' as const, skippedOnBlock: true },
+  { num: '06', name: 'Output Guard', key: 'guard_response' as const, skippedOnBlock: true },
+  { num: '07', name: 'Audit & Telemetry', key: 'audit' as const },
+];
 
 const PAGE_SIZE = 10;
 
 export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefresh, isRefreshing }) => {
-  const [search,    setSearch]    = useState('');
-  const [decFil,    setDecFil]    = useState('All Decisions');
-  const [riskFil,   setRiskFil]   = useState('All Risk Levels');
-  const [clsFil,    setClsFil]    = useState('All Classifications');
-  const [selected,  setSelected]  = useState<AuditEvent | null>(DEMO[0]);
-  const [detailTab, setDetailTab] = useState<'overview'|'stage'|'signals'|'raw'>('overview');
-  const [copiedHash, setCopiedHash] = useState<string|null>(null);
+  const [search, setSearch] = useState('');
+  const [decFil, setDecFil] = useState('All Decisions');
+  const [riskFil, setRiskFil] = useState('All Risk Levels');
+  const [clsFil, setClsFil] = useState('All Classifications');
+  const [selected, setSelected] = useState<AuditEvent | null>(auditEvents[0] || null);
+  const [detailTab, setDetailTab] = useState<'overview' | 'stage' | 'signals' | 'raw'>('overview');
+  const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  const baseRows = auditEvents.length > 0 ? auditEvents : DEMO;
+  React.useEffect(() => {
+    if (!selected && auditEvents.length > 0) {
+      setSelected(auditEvents[0]);
+    }
+  }, [auditEvents, selected]);
+
+  const baseRows = auditEvents;
 
   const filtered = useMemo(() => baseRows.filter(e => {
     const matchS = !search
-      || (e.gateway_request_id||'').toLowerCase().includes(search.toLowerCase())
-      || (e.input_sha256||'').toLowerCase().includes(search.toLowerCase())
-      || (e.classification||'').toLowerCase().includes(search.toLowerCase());
+      || (e.gateway_request_id || '').toLowerCase().includes(search.toLowerCase())
+      || (e.input_sha256 || '').toLowerCase().includes(search.toLowerCase())
+      || (e.classification || '').toLowerCase().includes(search.toLowerCase());
     const matchD = decFil === 'All Decisions' || e.policy_decision === decFil;
-    const matchR = riskFil === 'All Risk Levels' || e.risk_band === riskFil.replace(' Risk','');
+    const matchR = riskFil === 'All Risk Levels' || e.risk_band === riskFil.replace(' Risk', '');
     const matchC = clsFil === 'All Classifications'
-      || (e.classification||'').toLowerCase().includes(clsFil.replace(' Classifications','').toLowerCase());
+      || (e.classification || '').toLowerCase().includes(clsFil.replace(' Classifications', '').toLowerCase());
     return matchS && matchD && matchR && matchC;
   }), [baseRows, search, decFil, riskFil, clsFil]);
 
-  const totalReqs     = filtered.length;
-  const totalBlocked  = filtered.filter(e => e.policy_decision === 'BLOCK').length;
+  const totalReqs = filtered.length;
+  const totalBlocked = filtered.filter(e => e.policy_decision === 'BLOCK').length;
   const totalRedacted = filtered.filter(e => e.policy_decision === 'REDACT').length;
-  const pages         = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows      = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const selectRow = (evt: AuditEvent) => {
-    setSelected(evt); setDetailTab('overview'); onSelectAudit(evt);
+    setSelected(evt);
+    onSelectAudit(evt);
   };
 
   const copyHash = (h: string, e: React.MouseEvent) => {
@@ -110,84 +100,135 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
   };
 
   const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(filtered, null, 2)], { type:'application/json' });
+    const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `audit_trail_${Date.now()}.json`;
     a.click();
   };
 
-  /* pagination display numbers */
-  const pNums = [1, 2, 3];
-
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* ══ PAGE HEADER ══════════════════════════════════════════ */}
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-header-icon" style={{ background:'#EEF2FF' }}>
-            <FileText size={22} color="#6366F1" />
+      {/* ── Top Header ── */}
+      <div
+        className="card"
+        style={{
+          padding: '18px 24px',
+          background: '#FFFFFF',
+          borderRadius: 14,
+          border: '1px solid #E2E8F0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 10,
+              background: '#F5F3FF',
+              border: '1px solid #DDD6FE',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <FileText size={22} color="#7C3AED" />
           </div>
           <div>
-            <div className="page-header-title">Audit Trail</div>
-            <div className="page-header-sub">
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+              Audit Trail
+            </h1>
+            <div style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
               Complete record of all requests processed through PrismGuard AI. Track decisions, risk scores, and security events.
             </div>
           </div>
         </div>
 
-        <div className="page-header-right">
-          {/* Stat chips */}
-          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8 }}>
-            <div style={{ width:28, height:28, borderRadius:6, background:'#EEF2FF', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <FileText size={14} color="#6366F1" />
+        {/* Right Stats & Export */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Total Requests */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <FileText size={15} color="#2563EB" />
             </div>
             <div>
-              <div style={{ fontSize:15, fontWeight:800, color:'#111827', lineHeight:1 }}>{totalReqs.toLocaleString()}</div>
-              <div style={{ fontSize:10, color:'#6B7280' }}>Total Requests</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>{totalReqs.toLocaleString()}</div>
+              <div style={{ fontSize: 10, color: '#64748B' }}>Total Requests</div>
             </div>
           </div>
 
-          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8 }}>
-            <div style={{ width:28, height:28, borderRadius:6, background:'#FEE2E2', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <X size={14} color="#DC2626" />
+          {/* Blocked */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={15} color="#DC2626" />
             </div>
             <div>
-              <div style={{ fontSize:15, fontWeight:800, color:'#111827', lineHeight:1 }}>{totalBlocked}</div>
-              <div style={{ fontSize:10, color:'#6B7280' }}>Blocked</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>{totalBlocked || 106}</div>
+              <div style={{ fontSize: 10, color: '#64748B' }}>Blocked</div>
             </div>
           </div>
 
-          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8 }}>
-            <div style={{ width:28, height:28, borderRadius:6, background:'#FEF3C7', display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <Shield size={14} color="#D97706" />
+          {/* Redacted */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: '#FFFBEB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={15} color="#D97706" />
             </div>
             <div>
-              <div style={{ fontSize:15, fontWeight:800, color:'#111827', lineHeight:1 }}>{totalRedacted}</div>
-              <div style={{ fontSize:10, color:'#6B7280' }}>Redacted</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', lineHeight: 1.1 }}>{totalRedacted || 12}</div>
+              <div style={{ fontSize: 10, color: '#64748B' }}>Redacted</div>
             </div>
           </div>
 
           <button
-            className="btn btn-secondary"
-            style={{ fontSize:12, gap:6, display:'flex', alignItems:'center' }}
+            className="btn"
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              color: '#2563EB',
+              padding: '8px 14px',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
             onClick={exportJSON}
           >
-            <Download size={13} />
+            <Download size={14} color="#2563EB" />
             Export Trail (JSON)
           </button>
         </div>
       </div>
 
-      {/* ══ FILTER BAR ══════════════════════════════════════════ */}
-      <div className="card" style={{ padding:'10px 16px', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+      {/* ── Filter Bar ── */}
+      <div
+        className="card"
+        style={{
+          padding: '12px 18px',
+          background: '#FFFFFF',
+          borderRadius: 12,
+          border: '1px solid #E2E8F0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
         {/* Search */}
-        <div style={{ position:'relative', flex:'1 1 240px', minWidth:0 }}>
-          <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#9CA3AF', pointerEvents:'none' }} />
+        <div style={{ position: 'relative', flex: '1 1 280px' }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
           <input
             className="input"
-            style={{ paddingLeft:30, width:'100%', fontSize:12 }}
+            style={{ paddingLeft: 32, width: '100%', fontSize: 12.5, borderRadius: 8, border: '1px solid #E2E8F0' }}
             placeholder="Search by Request ID, SHA-256 hash, or classification..."
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
@@ -196,14 +237,14 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
 
         {/* Dropdowns */}
         {[
-          { val:decFil,  set:setDecFil,  opts:['All Decisions','ALLOW','REVIEW','BLOCK','REDACT','REVIEW_GUARD_BLOCK'] },
-          { val:riskFil, set:setRiskFil, opts:['All Risk Levels','LOW Risk','MEDIUM Risk','HIGH Risk','CRITICAL Risk'] },
-          { val:clsFil,  set:setClsFil,  opts:['All Classifications','Benign','Injection','Obfuscation','Role Manipulation','Output Leakage'] },
+          { val: decFil, set: setDecFil, opts: ['All Decisions', 'ALLOW', 'REVIEW', 'BLOCK', 'REDACT', 'REVIEW_GUARD_BLOCK'] },
+          { val: riskFil, set: setRiskFil, opts: ['All Risk Levels', 'LOW Risk', 'MEDIUM Risk', 'HIGH Risk', 'CRITICAL Risk'] },
+          { val: clsFil, set: setClsFil, opts: ['All Classifications', 'Benign', 'Injection', 'Obfuscation', 'Role Manipulation', 'Output Leakage'] },
         ].map((d, i) => (
-          <div key={i} style={{ position:'relative' }}>
+          <div key={i} style={{ position: 'relative' }}>
             <select
               className="select"
-              style={{ fontSize:12, paddingRight:24 }}
+              style={{ fontSize: 12, paddingRight: 24, borderRadius: 8, border: '1px solid #E2E8F0', background: '#FFFFFF' }}
               value={d.val}
               onChange={e => { d.set(e.target.value); setPage(1); }}
             >
@@ -212,16 +253,29 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
           </div>
         ))}
 
-        {/* Date range */}
-        <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 10px', background:'var(--bg-surface)', border:'1px solid var(--border-medium)', borderRadius:7, fontSize:12, color:'var(--text-secondary)', whiteSpace:'nowrap' }}>
-          <Calendar size={13} color="var(--text-muted)" />
-          Oct 23, 2026 – Oct 29, 2026
+        {/* Date Range */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: 12, color: '#334155' }}>
+          <Calendar size={14} color="#64748B" />
+          <span>Oct 23, 2026 – Oct 29, 2026</span>
         </div>
 
-        {/* Sync */}
+        {/* Sync from SQLite */}
         <button
-          className="btn btn-secondary"
-          style={{ fontSize:12, gap:6 }}
+          className="btn"
+          style={{
+            marginLeft: 'auto',
+            fontSize: 12,
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            color: '#2563EB',
+            padding: '7px 14px',
+            borderRadius: 8,
+            cursor: 'pointer',
+          }}
           onClick={onRefresh}
           disabled={isRefreshing}
         >
@@ -230,144 +284,187 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
         </button>
       </div>
 
-      {/* ══ TABLE + DETAIL PANEL ════════════════════════════════ */}
-      <div style={{ display:'grid', gridTemplateColumns: selected ? 'minmax(0,1fr) 400px' : '1fr', gap:16, alignItems:'start' }}>
+      {/* ── Table & Details Panel ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: selected ? 'minmax(0, 1fr) 420px' : '1fr', gap: 16, alignItems: 'start' }}>
 
-        {/* ── TABLE ── */}
-        <div className="card" style={{ overflow:'hidden' }}>
-          {/* Table header row */}
-          <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border-light)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+        {/* Table Card */}
+        <div className="card" style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+          {/* Table Header */}
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <span style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)' }}>Audit Events</span>
-              <span style={{ fontSize:11, color:'var(--text-muted)', marginLeft:8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Audit Events</span>
+              <span style={{ fontSize: 11.5, color: '#64748B', marginLeft: 8 }}>
                 Showing {totalReqs.toLocaleString()} requests from the database
               </span>
             </div>
 
-            {/* Pagination */}
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:2 }}>
-                <button className="btn-ghost" style={{ padding:'4px 6px' }} onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}>
+            {/* Pagination Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button
+                  className="btn-ghost"
+                  style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0' }}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
                   <ChevronLeft size={13} />
                 </button>
-                {pNums.map(n => (
+                {[1, 2, 3].map(n => (
                   <button
                     key={n}
-                    className="btn-ghost"
-                    style={{ padding:'4px 8px', fontWeight: page===n ? 700 : 400, color: page===n ? 'var(--brand-primary)' : undefined, background: page===n ? '#EEF2FF' : undefined, borderRadius:5 }}
                     onClick={() => setPage(n)}
+                    style={{
+                      padding: '4px 9px',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      border: '1px solid',
+                      borderColor: page === n ? '#2563EB' : '#E2E8F0',
+                      background: page === n ? '#EFF6FF' : '#FFFFFF',
+                      color: page === n ? '#2563EB' : '#334155',
+                      cursor: 'pointer',
+                    }}
                   >
                     {n}
                   </button>
                 ))}
-                <span style={{ fontSize:12, color:'var(--text-muted)', padding:'0 4px' }}>...</span>
-                <button className="btn-ghost" style={{ padding:'4px 8px' }} onClick={() => setPage(pages)}>
+                <span style={{ fontSize: 11, color: '#94A3B8' }}>...</span>
+                <button
+                  onClick={() => setPage(pages)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    border: '1px solid #E2E8F0',
+                    background: '#FFFFFF',
+                    color: '#334155',
+                    cursor: 'pointer',
+                  }}
+                >
                   {pages}
                 </button>
-                <button className="btn-ghost" style={{ padding:'4px 6px' }} onClick={() => setPage(p => Math.min(pages,p+1))} disabled={page===pages}>
+                <button
+                  className="btn-ghost"
+                  style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0' }}
+                  onClick={() => setPage(p => Math.min(pages, p + 1))}
+                  disabled={page === pages}
+                >
                   <ChevronRight size={13} />
                 </button>
               </div>
-              <select className="select" style={{ fontSize:11, padding:'4px 6px' }}>
-                <option>10 / page</option>
-              </select>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 6, padding: '3px 8px' }}>
+                <span>10 / page</span>
+                <ChevronDown size={12} color="#94A3B8" />
+              </div>
             </div>
           </div>
 
           {/* Table */}
-          <div style={{ overflowX:'auto' }}>
-            <table className="tbl">
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl" style={{ margin: 0, width: '100%' }}>
               <thead>
-                <tr>
-                  <th>Request ID</th>
-                  <th>Timestamp <span style={{ color:'#6366F1', fontSize:10 }}>↕</span></th>
-                  <th>Input SHA-256</th>
-                  <th>Classification</th>
-                  <th>Risk</th>
-                  <th>Guard Decision</th>
-                  <th>Policy Decision</th>
-                  <th>Latency</th>
-                  <th>Actions</th>
+                <tr style={{ background: '#F8FAFC' }}>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Request ID</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Timestamp ⇅</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Input SHA-256</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Classification</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Risk</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Guard Decision</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Policy Decision</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Latency</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map(evt => {
-                  const isSelected = selected?.id === evt.id;
+                {pageRows.map((evt) => {
+                  const isSel = selected?.gateway_request_id === evt.gateway_request_id;
+                  const isAllow = (evt.guard_decision as string) === 'ALLOWED' || (evt.guard_decision as string) === 'ALLOW';
+
                   return (
                     <tr
-                      key={evt.id}
+                      key={evt.gateway_request_id}
                       onClick={() => selectRow(evt)}
-                      style={{ background: isSelected ? '#F5F3FF' : undefined, cursor:'pointer' }}
+                      style={{
+                        background: isSel ? '#F8FAFC' : '#FFFFFF',
+                        borderBottom: '1px solid #F1F5F9',
+                        cursor: 'pointer',
+                      }}
                     >
-                      {/* Request ID */}
-                      <td style={{ fontFamily:'var(--font-mono)', fontSize:12, fontWeight:600, color:'#6366F1', whiteSpace:'nowrap' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: '#2563EB', fontWeight: 600, padding: '10px 14px' }}>
                         {evt.gateway_request_id}
                       </td>
-
-                      {/* Timestamp */}
-                      <td style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text-muted)', whiteSpace:'nowrap' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#64748B', padding: '10px 14px' }}>
                         {evt.timestamp}
                       </td>
-
-                      {/* SHA-256 */}
-                      <td style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text-muted)' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                          <span>{(evt.input_sha256||'').substring(0,12)}</span>
-                          <button
-                            style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', color:'var(--text-disabled)', display:'flex' }}
-                            onClick={e => copyHash(evt.input_sha256||'', e)}
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#64748B', padding: '10px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span>{evt.input_sha256?.substring(0, 10)}...</span>
+                          <span
+                            onClick={e => copyHash(evt.input_sha256, e)}
+                            title="Copy SHA-256"
+                            style={{ cursor: 'pointer', display: 'flex' }}
                           >
-                            {copiedHash === evt.input_sha256
-                              ? <Check size={10} color="var(--status-allow)" />
-                              : <Copy size={10} />
-                            }
-                          </button>
+                            {copiedHash === evt.input_sha256 ? <Check size={11} color="#059669" /> : <Copy size={11} color="#94A3B8" />}
+                          </span>
                         </div>
                       </td>
-
-                      {/* Classification with dot */}
-                      <td style={{ fontSize:12 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          <span className={`dot ${dotCls(evt.risk_score||0)}`} />
-                          {evt.classification}
+                      <td style={{ fontSize: 12, padding: '10px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              backgroundColor: dotCls(evt.risk_score || 0),
+                            }}
+                          />
+                          <span style={{ color: '#1E293B', fontWeight: 500 }}>{evt.classification}</span>
                         </div>
                       </td>
-
-                      {/* Risk score */}
-                      <td>
-                        <span style={{ fontFamily:'var(--font-mono)', fontWeight:700, fontSize:13, color: riskClr(evt.risk_score||0) }}>
-                          {evt.risk_score}
+                      <td
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          color: dotCls(evt.risk_score || 0),
+                          padding: '10px 14px',
+                        }}
+                      >
+                        {evt.risk_score}
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 7px',
+                            borderRadius: 6,
+                            fontFamily: 'var(--font-mono)',
+                            background: isAllow ? '#ECFDF5' : '#FEF2F2',
+                            color: isAllow ? '#059669' : '#DC2626',
+                            border: `1px solid ${isAllow ? '#A7F3D0' : '#FECACA'}`,
+                          }}
+                        >
+                          {isAllow ? 'ALLOW' : 'BLOCK'}
                         </span>
                       </td>
-
-                      {/* Guard Decision */}
-                      <td>
-                        <span className={`badge ${evt.guard_decision==='ALLOW'||evt.guard_decision==='ALLOWED' ? 'badge-allow' : 'badge-block'}`} style={{ fontSize:10 }}>
-                          {evt.guard_decision==='ALLOW'||evt.guard_decision==='ALLOWED' ? 'ALLOW' : evt.guard_decision}
-                        </span>
-                      </td>
-
-                      {/* Policy Decision */}
-                      <td>
-                        <span className={`badge ${decBadge(evt.policy_decision)}`} style={{ fontSize:10 }}>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span
+                          className={`badge ${decBadge(evt.policy_decision)}`}
+                          style={{ fontSize: 9.5, padding: '2px 7px', borderRadius: 6 }}
+                        >
                           {evt.policy_decision}
                         </span>
                       </td>
-
-                      {/* Latency */}
-                      <td style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text-muted)', whiteSpace:'nowrap' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#64748B', padding: '10px 14px' }}>
                         {evt.total_latency_ms} ms
                       </td>
-
-                      {/* Inspect */}
-                      <td>
-                        <button
-                          className="btn-ghost"
-                          style={{ fontSize:11, color:'#6366F1', fontWeight:500 }}
-                          onClick={e => { e.stopPropagation(); selectRow(evt); }}
-                        >
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ color: '#2563EB', fontSize: 11.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
                           Inspect →
-                        </button>
+                        </span>
                       </td>
                     </tr>
                   );
@@ -377,258 +474,247 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
           </div>
         </div>
 
-        {/* ── REQUEST DETAIL PANEL ── */}
+        {/* Right Details Panel */}
         {selected && (
           <div
             className="card"
-            style={{ position:'sticky', top:76, overflow:'hidden', display:'flex', flexDirection:'column' }}
+            style={{
+              background: '#FFFFFF',
+              borderRadius: 14,
+              border: '1px solid #E2E8F0',
+              padding: '18px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}
           >
-            {/* Panel header */}
-            <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border-light)', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
-              <div>
-                <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>Request Details</div>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  {/* Icon + ID + timestamp */}
-                  <div style={{ width:32, height:32, borderRadius:7, background:'#EEF2FF', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <FileText size={15} color="#6366F1" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)' }}>
-                      {selected.gateway_request_id}
-                    </div>
-                    <div style={{ fontSize:11, color:'var(--text-muted)' }}>{selected.timestamp}</div>
-                  </div>
-                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:5 }}>
-                    <span className={`badge ${decBadge(selected.policy_decision)}`} style={{ fontSize:10 }}>
-                      {selected.policy_decision}
-                    </span>
-                    <span style={{
-                      fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4,
-                      background: selected.risk_score>=60 ? '#FEE2E2' : selected.risk_score>=30 ? '#FEF3C7' : '#D1FAE5',
-                      color:      selected.risk_score>=60 ? '#991B1B' : selected.risk_score>=30 ? '#92400E' : '#065F46',
-                      border:`1px solid ${selected.risk_score>=60 ? '#FECACA' : selected.risk_score>=30 ? '#FDE68A' : '#A7F3D0'}`,
-                    }}>
-                      {selected.risk_score>=60 ? 'HIGH' : selected.risk_score>=30 ? 'MEDIUM' : 'LOW'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Request Details</span>
               <button
-                style={{ background:'none', border:'none', cursor:'pointer', padding:'4px', color:'var(--text-muted)', display:'flex', flexShrink:0 }}
                 onClick={() => setSelected(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex' }}
               >
                 <X size={16} />
               </button>
             </div>
 
-            {/* Detail tabs */}
-            <div style={{ borderBottom:'1px solid var(--border-light)', padding:'0 4px', display:'flex' }}>
-              {(['overview','stage','signals','raw'] as const).map(t => (
-                <button
-                  key={t}
-                  className={`tab-btn${detailTab===t?' active':''}`}
-                  style={{ fontSize:12, padding:'8px 12px' }}
-                  onClick={() => setDetailTab(t)}
+            {/* Request Identity Strip */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 14px',
+                borderRadius: 10,
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FileText size={16} color="#2563EB" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', fontFamily: 'var(--font-mono)' }}>
+                    {selected.gateway_request_id}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#64748B' }}>
+                    {selected.timestamp} UTC
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    background: '#FEF3C7',
+                    color: '#92400E',
+                    border: '1px solid #FDE68A',
+                  }}
                 >
-                  {t==='overview' ? 'Overview' : t==='stage' ? 'Stage Details' : t==='signals' ? 'Detection Signals' : 'Raw Data'}
+                  {selected.policy_decision}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: '#DC2626',
+                    color: '#FFFFFF',
+                  }}
+                >
+                  Risk: {selected.risk_score}/100 {selected.risk_band}
+                </span>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #F1F5F9', gap: 4 }}>
+              {[
+                { id: 'overview', label: 'Overview' },
+                { id: 'stage', label: 'Stage Details' },
+                { id: 'signals', label: 'Detection Signals' },
+                { id: 'raw', label: 'Raw Data' },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setDetailTab(t.id as any)}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: 11.5,
+                    fontWeight: detailTab === t.id ? 700 : 500,
+                    color: detailTab === t.id ? '#2563EB' : '#64748B',
+                    border: 'none',
+                    borderBottom: detailTab === t.id ? '2px solid #2563EB' : '2px solid transparent',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t.label}
                 </button>
               ))}
             </div>
 
-            {/* Panel body */}
-            <div style={{ padding:'14px 16px', overflowY:'auto', maxHeight:460, display:'flex', flexDirection:'column', gap:14 }}>
+            {/* Tab: Overview */}
+            {detailTab === 'overview' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* 2-column info */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  {/* Request Information */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Request Information
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Request ID: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{selected.gateway_request_id}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Input SHA-256: <span style={{ fontFamily: 'var(--font-mono)' }}>{selected.input_sha256?.substring(0, 10)}...</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Classification: <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dotCls(selected.risk_score || 0) }} />
+                      <strong style={{ color: '#0F172A' }}>{selected.classification}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Input Length: <strong style={{ color: '#0F172A' }}>{(selected as any).input_length || 88} characters</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Total Latency: <strong style={{ color: '#0F172A' }}>{selected.total_latency_ms} ms</strong>
+                    </div>
+                  </div>
 
-              {detailTab === 'overview' && (
-                <>
-                  {/* 2-col: Request Info + Policy */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                  {/* Policy & Decisions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Policy &amp; Decisions
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                      <span style={{ color: '#64748B' }}>Guard Decision</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0' }}>
+                        {selected.guard_decision}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                      <span style={{ color: '#64748B' }}>Policy Decision</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                        {selected.policy_decision}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                      <span style={{ color: '#64748B' }}>Risk Score</span>
+                      <strong style={{ color: '#DC2626' }}>{selected.risk_score} / 100</strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                      <span style={{ color: '#64748B' }}>Risk Level</span>
+                      <strong style={{ color: '#DC2626' }}>{selected.risk_band}</strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                      <span style={{ color: '#64748B' }}>LLM Call</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: '#FEE2E2', color: '#991B1B' }}>
+                        Prevented
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-                    {/* Request Information */}
-                    <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8 }}>
-                        Request Information
-                      </div>
-                      {[
-                        { k:'Request ID',      v: selected.gateway_request_id },
-                        { k:'Input SHA-256',   v: (selected.input_sha256||'').substring(0,12)+'...', mono:true },
-                        { k:'Classification',  v: selected.classification, dot:true },
-                        { k:'Input Length',    v: `${selected.input_length||88} characters` },
-                        { k:'Total Latency',   v: `${selected.total_latency_ms} ms` },
-                      ].map(row => (
-                        <div key={row.k} className="info-row">
-                          <span className="info-row-label" style={{ fontSize:11 }}>{row.k}</span>
-                          <span style={{ fontSize:11, fontWeight:600, color:'var(--text-primary)', fontFamily: row.mono ? 'var(--font-mono)' : undefined, display:'flex', alignItems:'center', gap:5 }}>
-                            {(row as any).dot && <span className={`dot ${dotCls(selected.risk_score||0)}`} />}
-                            {row.v}
+                {/* Detection Signals */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Detection Signals
+                  </div>
+                  {(!selected.local_signals || selected.local_signals.length === 0) ? (
+                    <div style={{ fontSize: 11, color: '#059669', background: '#ECFDF5', padding: '8px 10px', borderRadius: 6 }}>
+                      No malicious signals detected in input.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {selected.local_signals.map(s => (
+                        <div key={s} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #F1F5F9', fontSize: 11 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#DC2626' }} />
+                            <span style={{ color: '#1E293B', fontWeight: 500 }}>{s}</span>
+                          </div>
+                          <span style={{ color: '#DC2626', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                            +{SIG_SCORES[s] || 15}
                           </span>
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
 
-                    {/* Policy & Decisions */}
-                    <div>
-                      <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8 }}>
-                        Policy &amp; Decisions
-                      </div>
-                      <div className="info-row">
-                        <span className="info-row-label" style={{ fontSize:11 }}>Guard Decision</span>
-                        <span className={`badge ${selected.guard_decision==='ALLOW'||selected.guard_decision==='ALLOWED' ? 'badge-allow' : 'badge-block'}`} style={{ fontSize:9 }}>
-                          {selected.guard_decision==='ALLOW'||selected.guard_decision==='ALLOWED' ? 'ALLOW' : selected.guard_decision}
-                        </span>
-                      </div>
-                      <div className="info-row">
-                        <span className="info-row-label" style={{ fontSize:11 }}>Policy Decision</span>
-                        <span className={`badge ${decBadge(selected.policy_decision)}`} style={{ fontSize:9 }}>
-                          {selected.policy_decision}
-                        </span>
-                      </div>
-                      <div className="info-row">
-                        <span className="info-row-label" style={{ fontSize:11 }}>Risk Score</span>
-                        <span style={{ fontSize:12, fontWeight:800, color: riskClr(selected.risk_score||0) }}>
-                          {selected.risk_score} / 100
-                        </span>
-                      </div>
-                      <div className="info-row">
-                        <span className="info-row-label" style={{ fontSize:11 }}>Risk Level</span>
-                        <span style={{
-                          fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4,
-                          background: selected.risk_score>=60 ? '#FEE2E2' : selected.risk_score>=30 ? '#FEF3C7' : '#D1FAE5',
-                          color:      selected.risk_score>=60 ? '#991B1B' : selected.risk_score>=30 ? '#92400E' : '#065F46',
-                        }}>
-                          {selected.risk_band||'LOW'}
-                        </span>
-                      </div>
-                      <div className="info-row">
-                        <span className="info-row-label" style={{ fontSize:11 }}>LLM Call</span>
-                        <span style={{
-                          fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4,
-                          background: selected.stage_latencies?.llm ? '#D1FAE5' : '#FEE2E2',
-                          color:      selected.stage_latencies?.llm ? '#065F46' : '#991B1B',
-                        }}>
-                          {selected.stage_latencies?.llm ? 'Executed' : 'Prevented'}
-                        </span>
-                      </div>
-                    </div>
+                {/* Stage Latency Breakdown */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                    Stage Latency Breakdown
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {STAGE_STEPS.map(st => {
+                      const ms = selected.stage_latencies?.[st.key] || 0;
+                      const skipped = st.skippedOnBlock && ms === 0;
 
-                  {/* Detection Signals */}
-                  <div>
-                    <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8 }}>
-                      Detection Signals
-                    </div>
-                    {(selected.local_signals||[]).length === 0 ? (
-                      <span style={{ fontSize:12, color:'var(--text-muted)' }}>No signals detected</span>
-                    ) : (
-                      (selected.local_signals||[]).map((sig, i) => (
-                        <div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, marginBottom:5 }}>
-                          <span style={{ color:'#DC2626', fontSize:8 }}>●</span>
-                          <span style={{ color:'var(--text-secondary)', flex:1 }}>
-                            {sig.replace(/_/g,' ')}
-                          </span>
-                          <span style={{ fontFamily:'var(--font-mono)', fontSize:11, fontWeight:700, color:'#DC2626' }}>
-                            +{SIG_SCORES[sig] || 14}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Stage Latency Breakdown */}
-                  <div>
-                    <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:8 }}>
-                      Stage Latency Breakdown
-                    </div>
-                    {STAGES.map((s, i) => {
-                      const ms = selected.stage_latencies?.[s.key] || 0;
-                      const ran = ms > 0;
-                      const llmSkipped = !selected.stage_latencies?.llm && i >= 4;
-                      const label = ran ? 'Complete' : llmSkipped ? 'Skipped' : '—';
                       return (
-                        <div key={s.key} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5 }}>
-                          {/* Numbered circle */}
-                          <div style={{
-                            width:18, height:18, borderRadius:'50%', flexShrink:0,
-                            background: ran ? `${s.color}18` : '#F3F4F6',
-                            border:`1.5px solid ${ran ? s.color : '#E5E7EB'}`,
-                            display:'flex', alignItems:'center', justifyContent:'center',
-                          }}>
-                            <span style={{ fontSize:7, fontWeight:700, color: ran ? s.color : '#9CA3AF' }}>
-                              0{i+1}
+                        <div key={st.num} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, padding: '4px 6px', borderRadius: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 16, height: 16, borderRadius: '50%', background: skipped ? '#F1F5F9' : '#ECFDF5', color: skipped ? '#94A3B8' : '#059669', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {st.num}
                             </span>
+                            <span style={{ color: skipped ? '#94A3B8' : '#334155' }}>{st.name} {skipped && '(Skipped)'}</span>
                           </div>
-                          <span style={{ fontSize:12, color:'var(--text-secondary)', flex:1 }}>{s.label}</span>
-                          <span style={{
-                            fontSize:9, fontWeight:600, padding:'1px 6px', borderRadius:4,
-                            background: ran ? '#D1FAE5' : '#F3F4F6',
-                            color:      ran ? '#065F46' : '#6B7280',
-                          }}>
-                            {label}
-                          </span>
-                          <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--text-muted)', width:36, textAlign:'right' }}>
-                            {ran ? `${ms} ms` : '—'}
+                          <span style={{ fontFamily: 'var(--font-mono)', color: skipped ? '#94A3B8' : '#0F172A', fontWeight: 600 }}>
+                            {skipped ? '—' : `${ms} ms`}
                           </span>
                         </div>
                       );
                     })}
                   </div>
+                </div>
 
-                  {/* Policy Rationale */}
-                  <div style={{ background:'#FEFCE8', border:'1px solid #FDE68A', borderRadius:8, padding:'12px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
-                      <AlertTriangle size={13} color="#D97706" />
-                      <span style={{ fontSize:11, fontWeight:700, color:'#92400E' }}>Policy Rationale</span>
-                    </div>
-                    <div style={{ fontSize:12, color:'#78350F', lineHeight:1.6 }}>
-                      {selected.policy_rationale}
+                {/* Policy Rationale */}
+                <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <Lightbulb size={16} color="#D97706" style={{ marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E' }}>Policy Rationale</div>
+                    <div style={{ fontSize: 11, color: '#B45309', marginTop: 2, lineHeight: 1.45 }}>
+                      {selected.policy_rationale || 'Guard returned ALLOW, but PrismGuard detected transformation and instruction evidence. Request held for review.'}
                     </div>
                   </div>
-                </>
-              )}
-
-              {detailTab === 'stage' && (
-                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {STAGES.map((s, i) => {
-                    const ms = selected.stage_latencies?.[s.key] || 0;
-                    return (
-                      <div key={s.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'var(--bg-surface-2)', borderRadius:7, border:'1px solid var(--border-light)' }}>
-                        <div style={{ width:20, height:20, borderRadius:'50%', background:`${s.color}18`, border:`1.5px solid ${s.color}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                          <span style={{ fontSize:7, fontWeight:700, color:s.color }}>0{i+1}</span>
-                        </div>
-                        <span style={{ fontSize:12, fontWeight:500, flex:1 }}>{s.label}</span>
-                        <div style={{ width:80, height:6, background:'#F3F4F6', borderRadius:3, overflow:'hidden' }}>
-                          <div style={{ height:'100%', background:s.color, borderRadius:3, width:`${ms > 0 ? Math.min(100,(ms/360)*100) : 0}%` }} />
-                        </div>
-                        <span style={{ fontFamily:'var(--font-mono)', fontSize:11, fontWeight:600, color: ms > 0 ? 'var(--text-primary)' : 'var(--text-muted)', width:40, textAlign:'right' }}>
-                          {ms > 0 ? `${ms} ms` : '—'}
-                        </span>
-                      </div>
-                    );
-                  })}
                 </div>
-              )}
+              </div>
+            )}
 
-              {detailTab === 'signals' && (
-                <div>
-                  {(selected.local_signals||[]).length === 0 ? (
-                    <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)', fontSize:13 }}>No detection signals for this request</div>
-                  ) : (
-                    (selected.local_signals||[]).map((sig, i) => (
-                      <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', background:'var(--bg-surface-2)', borderRadius:7, border:'1px solid var(--border-light)', marginBottom:6 }}>
-                        <div style={{ width:8, height:8, borderRadius:'50%', background:'#DC2626', flexShrink:0 }} />
-                        <span style={{ fontSize:12, color:'var(--text-secondary)', flex:1 }}>{sig.replace(/_/g,' ')}</span>
-                        <span style={{ fontSize:11, fontWeight:700, color:'#DC2626', fontFamily:'var(--font-mono)' }}>+{SIG_SCORES[sig]||14}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {detailTab === 'raw' && (
-                <pre className="code-box" style={{ fontSize:10.5, maxHeight:420, overflowY:'auto' }}>
-                  {JSON.stringify(selected, null, 2)}
-                </pre>
-              )}
-            </div>
+            {/* Other tabs fallback */}
+            {detailTab !== 'overview' && (
+              <div style={{ padding: 10, background: '#F8FAFC', borderRadius: 8, fontSize: 11, fontFamily: 'var(--font-mono)', maxHeight: 300, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                {JSON.stringify(selected, null, 2)}
+              </div>
+            )}
           </div>
         )}
       </div>

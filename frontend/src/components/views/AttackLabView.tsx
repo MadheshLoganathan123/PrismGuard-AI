@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlaskConical, Search, Filter, Play, MessageSquare, RefreshCw, Copy, Check, Loader2, ChevronRight, AlertTriangle, CheckCircle2, Shield } from 'lucide-react';
+import { FlaskConical, Search, Play, MessageSquare, Copy, Check, Loader2, ChevronRight, AlertTriangle, CheckCircle2, Shield } from 'lucide-react';
 import type { TestCase, ActiveTab, AuditEvent } from '../../types';
 import { normalizeInput } from '../../engine/normalizer';
 import { detectCustomWeakness } from '../../engine/customDetector';
@@ -45,7 +45,7 @@ const H_GROUPS: Record<string, string[]> = {
 
 export const AttackLabView: React.FC<Props> = ({
   testCases, activePreset, setActivePreset, setActiveTab,
-  onSendToChat, onSelectAudit, testPromptOnBackend, isLiveMode,
+  onSendToChat, onSelectAudit: _onSelectAudit, testPromptOnBackend, isLiveMode: _isLiveMode,
 }) => {
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState('All (15)');

@@ -88,22 +88,18 @@ function decisionBadge(d: string) {
   return 'badge-gray';
 }
 
-export const DashboardView: React.FC<Props> = ({ auditEvents, testCases }) => {
-  const total    = auditEvents.length || 1284;
-  const allowed  = auditEvents.filter(e => e.policy_decision === 'ALLOW').length || 892;
-  const reviewed = auditEvents.filter(e => e.policy_decision?.startsWith('REVIEW')).length || 286;
-  const blocked  = auditEvents.filter(e => e.policy_decision === 'BLOCK').length || 106;
-  const quota    = 42;
+export const DashboardView: React.FC<Props> = ({ auditEvents, testCases: _testCases }) => {
+  const total    = auditEvents.length;
+  const allowed  = auditEvents.filter(e => e.policy_decision === 'ALLOW').length;
+  const reviewed = auditEvents.filter(e => e.policy_decision?.startsWith('REVIEW')).length;
+  const blocked  = auditEvents.filter(e => e.policy_decision === 'BLOCK').length;
+  const quota    = auditEvents.length;
+  const quotaPct = Math.min(100, Math.round((quota / 120) * 100));
+  const avgLat   = total > 0
+    ? Math.round(auditEvents.reduce((acc, e) => acc + (e.total_latency_ms || 0), 0) / total)
+    : 0;
 
-  const pct = (n: number) => Math.round((n / total) * 100);
-
-  const DEMO_ROWS = [
-    { time: '14:37:02', id: 'REQ-82A9F1', dec: 'REVIEW', risk: 82, lat: '199 ms' },
-    { time: '14:36:15', id: 'REQ-71C02D', dec: 'ALLOW',  risk: 12, lat: '187 ms' },
-    { time: '14:35:48', id: 'REQ-48E654', dec: 'BLOCK',  risk: 76, lat: '210 ms' },
-    { time: '14:34:21', id: 'REQ-37D8EC', dec: 'REVIEW', risk: 68, lat: '205 ms' },
-    { time: '14:33:10', id: 'REQ-1A9C5F', dec: 'ALLOW',  risk: 8,  lat: '142 ms' },
-  ];
+  const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
 
   const H_LABELS = ['Obfuscation\n(H1)', 'Instruction\nSmuggling (H2)', 'Multilingual\n(H3)', 'Payload Split\n(H4)', 'Partial/Error\n(H5)', 'Output Leakage\n(H6)'];
   const GUARD_DATA  = [35, 45, 50, 55, 40, 30];
@@ -112,7 +108,13 @@ export const DashboardView: React.FC<Props> = ({ auditEvents, testCases }) => {
   const PRISM_DATA2 = [93, 90, 86, 88, 92, 96];
 
   const RISK_LABELS = ['0-20\n(LOW)', '21-40\n(MEDIUM)', '41-60\n(HIGH)', '61-80\n(HIGH)', '81-100\n(CRITICAL)'];
-  const RISK_CNTS   = [212, 184, 126, 72, 18];
+  const RISK_CNTS   = [
+    auditEvents.filter(e => e.risk_score <= 20).length,
+    auditEvents.filter(e => e.risk_score > 20 && e.risk_score <= 40).length,
+    auditEvents.filter(e => e.risk_score > 40 && e.risk_score <= 60).length,
+    auditEvents.filter(e => e.risk_score > 60 && e.risk_score <= 80).length,
+    auditEvents.filter(e => e.risk_score > 80).length,
+  ];
   const RISK_COLORS = ['#059669','#D97706','#EA580C','#DC2626','#7C3AED'];
 
   const STAGES = [
@@ -141,8 +143,7 @@ export const DashboardView: React.FC<Props> = ({ auditEvents, testCases }) => {
         </div>
         <div className="page-header-right">
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border-medium)', borderRadius: 7, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            <Calendar size={14} /> Oct 23, 2026 – Oct 29, 2026
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <Calendar size={14} /> Live Gateway Telemetry
           </div>
           <button className="btn btn-secondary" style={{ fontSize: 12 }}>
             <RefreshCw size={13} /> Refresh Data
@@ -153,12 +154,12 @@ export const DashboardView: React.FC<Props> = ({ auditEvents, testCases }) => {
       {/* ── Stat cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12 }}>
         {[
-          { label:'Total Requests', value: total.toLocaleString(), sub:'↑ 12%', subClr:'#059669', icon:<FileText size={15} color="#6366F1"/>, bg:'#EEF2FF', spark:[700,820,760,900,850,1020,960,1284], spClr:'#6366F1' },
-          { label:'Allowed',        value: allowed.toLocaleString(), sub:`${pct(allowed)}% of total`, subClr:'#059669', icon:<CheckCircle2 size={15} color="#059669"/>, bg:'#D1FAE5', spark:[480,540,510,600,570,680,640,892], spClr:'#059669' },
-          { label:'Reviewed',       value: reviewed.toLocaleString(), sub:`${pct(reviewed)}% of total`, subClr:'#EA580C', icon:<Eye size={15} color="#EA580C"/>, bg:'#FFEDD5', spark:[140,160,155,175,165,195,180,286], spClr:'#EA580C' },
-          { label:'Blocked',        value: blocked.toLocaleString(), sub:`${pct(blocked)}% of total`, subClr:'#DC2626', icon:<AlertTriangle size={15} color="#DC2626"/>, bg:'#FEE2E2', spark:[50,60,58,72,65,80,75,106], spClr:'#DC2626' },
-          { label:'Avg End-to-End Latency', value:'236 ms', sub:'↓ 18%', subClr:'#059669', icon:<Zap size={15} color="#D97706"/>, bg:'#FEF3C7', spark:[280,260,240,255,248,240,238,236], spClr:'#D97706' },
-          { label:'Guard API Usage', value:`${quota} / 120`, sub:'35% of daily quota', subClr:'var(--text-muted)', icon:<Database size={15} color="#0284C7"/>, bg:'#E0F2FE', spark:[10,18,22,28,30,36,40,42], spClr:'#0284C7', isProgress: true },
+          { label:'Total Requests', value: total.toLocaleString(), sub: total > 0 ? `${total} recorded` : '0', subClr:'#059669', icon:<FileText size={15} color="#6366F1"/>, bg:'#EEF2FF', spark:[Math.max(0, total-3), Math.max(0, total-2), Math.max(0, total-1), total], spClr:'#6366F1' },
+          { label:'Allowed',        value: allowed.toLocaleString(), sub:`${pct(allowed)}% of total`, subClr:'#059669', icon:<CheckCircle2 size={15} color="#059669"/>, bg:'#D1FAE5', spark:[Math.max(0, allowed-2), Math.max(0, allowed-1), allowed], spClr:'#059669' },
+          { label:'Reviewed',       value: reviewed.toLocaleString(), sub:`${pct(reviewed)}% of total`, subClr:'#EA580C', icon:<Eye size={15} color="#EA580C"/>, bg:'#FFEDD5', spark:[Math.max(0, reviewed-2), Math.max(0, reviewed-1), reviewed], spClr:'#EA580C' },
+          { label:'Blocked',        value: blocked.toLocaleString(), sub:`${pct(blocked)}% of total`, subClr:'#DC2626', icon:<AlertTriangle size={15} color="#DC2626"/>, bg:'#FEE2E2', spark:[Math.max(0, blocked-2), Math.max(0, blocked-1), blocked], spClr:'#DC2626' },
+          { label:'Avg End-to-End Latency', value:`${avgLat} ms`, sub: total > 0 ? 'Live average' : 'N/A', subClr:'#059669', icon:<Zap size={15} color="#D97706"/>, bg:'#FEF3C7', spark:[avgLat, avgLat], spClr:'#D97706' },
+          { label:'Guard API Usage', value:`${quota} / 120`, sub:`${quotaPct}% of daily quota`, subClr:'var(--text-muted)', icon:<Database size={15} color="#0284C7"/>, bg:'#E0F2FE', spark:[0, quota], spClr:'#0284C7', isProgress: true },
         ].map((c: any) => (
           <div key={c.label} className="stat-card" style={{ padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -310,15 +311,27 @@ export const DashboardView: React.FC<Props> = ({ auditEvents, testCases }) => {
               <tr><th>Time</th><th>Request ID</th><th>Decision</th><th>Risk</th><th>Latency</th></tr>
             </thead>
             <tbody>
-              {DEMO_ROWS.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.time}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--brand-primary)', fontWeight: 600 }}>{r.id}</td>
-                  <td><span className={`badge ${decisionBadge(r.dec)}`} style={{ fontSize: 9 }}>{r.dec}</span></td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, color: r.risk >= 60 ? '#DC2626' : r.risk >= 30 ? '#EA580C' : '#059669' }}>{r.risk}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.lat}</td>
+              {auditEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: 12 }}>
+                    No audit events recorded in database yet.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                auditEvents.slice(0, 5).map((evt) => (
+                  <tr key={evt.id || evt.gateway_request_id}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
+                      {(evt.timestamp || '').substring(11, 19) || evt.timestamp}
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--brand-primary)', fontWeight: 600 }}>
+                      {evt.gateway_request_id?.substring(0, 10) || evt.id}
+                    </td>
+                    <td><span className={`badge ${decisionBadge(evt.policy_decision)}`} style={{ fontSize: 9 }}>{evt.policy_decision}</span></td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, color: evt.risk_score >= 60 ? '#DC2626' : evt.risk_score >= 30 ? '#EA580C' : '#059669' }}>{evt.risk_score}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{evt.total_latency_ms} ms</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

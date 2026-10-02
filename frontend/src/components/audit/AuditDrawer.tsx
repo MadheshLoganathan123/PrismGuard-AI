@@ -8,14 +8,6 @@ interface AuditDrawerProps {
   onClose: () => void;
 }
 
-function decisionBadge(d: string) {
-  if (d === 'ALLOW') return 'badge-allow';
-  if (d === 'BLOCK') return 'badge-block';
-  if (d?.startsWith('REVIEW')) return 'badge-review';
-  if (d === 'REDACT') return 'badge-redact';
-  return 'badge-gray';
-}
-
 export const AuditDrawer: React.FC<AuditDrawerProps> = ({ event, onClose }) => {
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [copiedJson, setCopiedJson] = useState<boolean>(false);
@@ -126,10 +118,11 @@ export const AuditDrawer: React.FC<AuditDrawerProps> = ({ event, onClose }) => {
               const ms = event.stage_latencies?.[latencyKeys[i]] || 0;
               const ran = ms > 0;
               const isGuard = i === 2;
+              const isAllowed = (event.guard_decision as string) === 'ALLOWED' || (event.guard_decision as string) === 'ALLOW';
               const dotClass = i === 1 && event.local_signals?.length > 0 && event.risk_score >= 40
                 ? 'dot-review'
                 : isGuard
-                  ? (event.guard_decision === 'ALLOWED' || event.guard_decision === 'ALLOW' ? 'dot-allow' : 'dot-block')
+                  ? (isAllowed ? 'dot-allow' : 'dot-block')
                   : ran ? 'dot-allow' : 'dot-muted';
 
               return (
@@ -154,7 +147,7 @@ export const AuditDrawer: React.FC<AuditDrawerProps> = ({ event, onClose }) => {
                     {i === 3
                       ? <Badge decision={event.policy_decision} showIcon={false} />
                       : <span style={{ fontSize: 11, color: ran ? (i === 1 && event.local_signals?.length > 0 && event.risk_score >= 40 ? 'var(--status-review)' : 'var(--status-allow)') : 'var(--text-disabled)' }}>
-                          {ran ? (i === 1 && event.local_signals?.length > 0 && event.risk_score >= 40 ? 'FLAGS RAISED' : i === 2 ? (event.guard_decision === 'ALLOWED' || event.guard_decision === 'ALLOW' ? 'ALLOW' : 'BLOCK') : 'PASSED') : (isBlockedOrReviewed && i >= 4 ? 'SKIPPED' : 'NOT RAN')}
+                          {ran ? (i === 1 && event.local_signals?.length > 0 && event.risk_score >= 40 ? 'FLAGS RAISED' : i === 2 ? (isAllowed ? 'ALLOW' : 'BLOCK') : 'PASSED') : (isBlockedOrReviewed && i >= 4 ? 'SKIPPED' : 'NOT RAN')}
                         </span>
                     }
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', width: 38, textAlign: 'right' }}>{ran ? `${ms}ms` : '—'}</span>

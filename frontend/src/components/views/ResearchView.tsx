@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, Download, Play, Search, ChevronLeft, ChevronRight, X, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Database, Download, Play, Search, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { TestCase } from '../../types';
 
 interface Props {
@@ -30,7 +30,7 @@ function catColor(cat: string) {
   return m[cat] || '#6B7280';
 }
 
-export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed, quotaTotal, onRunBatch, isProcessing }) => {
+export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed, quotaTotal: _quotaTotal, onRunBatch, isProcessing }) => {
   const [activeTab, setActiveTab] = useState<'matrix' | 'hypotheses'>('matrix');
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All Categories');

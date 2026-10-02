@@ -240,11 +240,31 @@ export function useAppStore() {
     }
   };
 
+  // Refresh all data from live backend & SQLite
+  const refreshData = async () => {
+    setIsProcessing(true);
+    try {
+      await syncWithBackend();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Refresh current session (clear chat conversation, reset drawer, resync backend)
+  const refreshSession = async () => {
+    setIsProcessing(true);
+    try {
+      setChatMessages([]);
+      setSelectedAuditDrawerEvent(null);
+      setActiveAttackPreset(testCasesList[0] || TEST_CASES[0]);
+      await syncWithBackend();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const resetToDemoState = async () => {
-    setChatMessages([]);
-    setSelectedAuditDrawerEvent(null);
-    setActiveAttackPreset(testCasesList[0] || TEST_CASES[0]);
-    await syncWithBackend();
+    await refreshSession();
   };
 
   const refreshAuditEvents = async () => {
@@ -288,6 +308,8 @@ export function useAppStore() {
     runHarnessBatch,
     refreshHealth,
     refreshAuditEvents,
+    refreshData,
+    refreshSession,
     resetToDemoState,
     testCases: testCasesList
   };
