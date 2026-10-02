@@ -29,6 +29,7 @@ class Settings:
         guard_token_raw = (
             os.getenv("GUARD_TOKEN")
             or os.getenv("SECURE_GUARD_TOKEN")
+            or os.getenv("SECUREAI_GUARD_TOKEN")
             or os.getenv("SCURE_GUARD_TOKEN")
             or ""
         )
