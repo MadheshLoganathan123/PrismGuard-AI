@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   BarChart3, 
   Clock, 
-  PieChart 
+  PieChart
 } from 'lucide-react';
 import type { AuditEvent, TestCase } from '../../types';
 
@@ -15,7 +15,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   auditEvents,
   testCases
 }) => {
-  // Compute analytics
+  // Compute analytics from live SQLite audit events
   const totalAudit = auditEvents.length;
   const blocks = auditEvents.filter(e => e.policy_decision === 'BLOCK').length;
   const reviews = auditEvents.filter(e => e.policy_decision === 'REVIEW' || e.policy_decision === 'REVIEW_GUARD_BLOCK').length;
@@ -24,9 +24,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const attackCases = testCases.filter(t => t.expected_label === 'attack-like');
   const guardMisses = attackCases.filter(t => t.guard_allowed).length;
-
-  const guardDetectionPct = Math.round(((attackCases.length - guardMisses) / attackCases.length) * 100);
+  const guardDetectionPct = attackCases.length > 0 ? Math.round(((attackCases.length - guardMisses) / attackCases.length) * 100) : 0;
   const prismDetectionPct = 100;
+
+  // Live average latencies from audit events
+  const eventsWithLatency = auditEvents.filter(e => e.stage_latencies && e.total_latency_ms > 0);
+  const avg = (fn: (e: AuditEvent) => number, fallback: number) =>
+    eventsWithLatency.length > 0
+      ? Math.round(eventsWithLatency.reduce((s, e) => s + fn(e), 0) / eventsWithLatency.length)
+      : fallback;
+  const avgNorm = avg(e => e.stage_latencies.normalizer || 0, 11);
+  const avgDetect = avg(e => e.stage_latencies.detector || 0, 14);
+  const avgGuard = avg(e => e.stage_latencies.guard_prompt || 0, 165);
+  const avgPolicy = avg(e => (e.stage_latencies.risk_engine || 0) + (e.stage_latencies.policy || 0), 7);
+  const avgLlm = avg(e => e.stage_latencies.llm || 0, 360);
+  const avgGuardResp = avg(e => e.stage_latencies.guard_response || 0, 135);
+  const avgAudit = avg(e => e.stage_latencies.audit || 0, 5);
+  const localOverhead = avgNorm + avgDetect + avgPolicy + avgAudit;
+  const remoteLatency = avgGuard + avgGuardResp;
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1240px', margin: '0 auto' }}>
@@ -95,21 +111,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Latency Overhead */}
+        {/* Latency Overhead — live avg from SQLite */}
         <div className="glass-panel" style={{ padding: '20px' }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
             GATEWAY OVERHEAD BUDGET
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
             <span style={{ fontSize: '32px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-              +28ms
+              +{localOverhead}ms
             </span>
             <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
               Mean Gateway Overhead
             </span>
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-            Input normalizer (11ms) + Custom detector (14ms) + Policy eval (3ms).
+            Normalizer ({avgNorm}ms) + Detector ({avgDetect}ms) + Policy ({avgPolicy}ms) + Audit ({avgAudit}ms).
+            {eventsWithLatency.length > 0 && <span style={{ color: 'var(--brand-cyan)' }}> Live avg from {eventsWithLatency.length} sessions.</span>}
           </div>
         </div>
 
@@ -199,13 +216,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {[
-              { stage: '1. Input Normalizer', ms: 11, pct: 2, color: 'var(--brand-cyan)' },
-              { stage: '2. Custom Detector', ms: 14, pct: 3, color: 'var(--brand-purple)' },
-              { stage: '3. SecureAI Guard Prompt Check', ms: 165, pct: 30, color: 'var(--text-secondary)' },
-              { stage: '4. Risk & Policy Evaluator', ms: 7, pct: 1, color: 'var(--status-allow)' },
-              { stage: '5. LLM Inference Generation', ms: 360, pct: 60, color: 'var(--brand-primary)' },
-              { stage: '6. Guard Response Check & Redact', ms: 135, pct: 24, color: 'var(--status-warn)' },
-              { stage: '7. SHA-256 Audit Trail', ms: 5, pct: 1, color: 'var(--text-muted)' }
+              { stage: '1. Input Normalizer', ms: avgNorm, pct: 2, color: 'var(--brand-cyan)', scope: 'Local' },
+              { stage: '2. Custom Detector', ms: avgDetect, pct: 3, color: 'var(--brand-purple)', scope: 'Local' },
+              { stage: '3. SecureAI Guard Prompt Check', ms: avgGuard, pct: 30, color: 'var(--text-secondary)', scope: 'Remote' },
+              { stage: '4. Risk & Policy Evaluator', ms: avgPolicy, pct: 1, color: 'var(--status-allow)', scope: 'Local' },
+              { stage: '5. LLM Inference Generation', ms: avgLlm, pct: 60, color: 'var(--brand-primary)', scope: 'Remote' },
+              { stage: '6. Guard Response Check & Redact', ms: avgGuardResp, pct: 24, color: 'var(--status-warn)', scope: 'Remote' },
+              { stage: '7. SHA-256 Audit Trail', ms: avgAudit, pct: 1, color: 'var(--text-muted)', scope: 'Local' }
             ].map((s, idx) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px' }}>
@@ -214,9 +231,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{s.ms}ms</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '10px', width: '32px' }}>
-                    {idx < 2 || idx === 3 ? 'Local' : 'Remote'}
-                  </span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10px', width: '42px' }}>{s.scope}</span>
                 </div>
               </div>
             ))}
@@ -231,8 +246,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             display: 'flex',
             justifyContent: 'space-between'
           }}>
-            <span>Total Local Overhead: <strong>37ms</strong></span>
-            <span>Remote Network Latency: <strong>660ms</strong></span>
+            <span>Local Overhead: <strong>{localOverhead}ms</strong></span>
+            <span>Remote Latency: <strong>{remoteLatency}ms</strong></span>
           </div>
         </div>
       </div>

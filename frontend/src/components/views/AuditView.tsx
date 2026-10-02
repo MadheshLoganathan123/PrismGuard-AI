@@ -5,7 +5,8 @@ import {
   Download, 
   Copy, 
   Check, 
-  ArrowRight 
+  ArrowRight,
+  RefreshCw
 } from 'lucide-react';
 import type { AuditEvent } from '../../types';
 import { Badge } from '../common/Badge';
@@ -13,11 +14,15 @@ import { Badge } from '../common/Badge';
 interface AuditViewProps {
   auditEvents: AuditEvent[];
   onSelectAudit: (event: AuditEvent) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const AuditView: React.FC<AuditViewProps> = ({
   auditEvents,
-  onSelectAudit
+  onSelectAudit,
+  onRefresh,
+  isRefreshing = false
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [decisionFilter, setDecisionFilter] = useState<string>('ALL');
@@ -69,10 +74,18 @@ export const AuditView: React.FC<AuditViewProps> = ({
             </p>
           </div>
 
-          <button onClick={exportAuditLog} className="btn btn-secondary" style={{ fontSize: '12px' }}>
-            <Download size={14} />
-            <span>Export Audit Trail (JSON)</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {onRefresh && (
+              <button onClick={onRefresh} disabled={isRefreshing} className="btn btn-secondary" style={{ fontSize: '12px' }}>
+                <RefreshCw size={14} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+                <span>{isRefreshing ? 'Syncing...' : 'Sync from SQLite'}</span>
+              </button>
+            )}
+            <button onClick={exportAuditLog} className="btn btn-secondary" style={{ fontSize: '12px' }}>
+              <Download size={14} />
+              <span>Export Trail (JSON)</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter Toolbar */}
@@ -165,7 +178,20 @@ export const AuditView: React.FC<AuditViewProps> = ({
             </tr>
           </thead>
           <tbody>
-            {filteredEvents.map(evt => (
+            {filteredEvents.length === 0 ? (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={28} color="var(--text-muted)" />
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>No audit events found</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Send prompts through Chat or Attack Lab to generate real-time audit records in SQLite.
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filteredEvents.map(evt => (
               <tr 
                 key={evt.id}
                 style={{
@@ -235,7 +261,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
                   </button>
                 </td>
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
       </div>

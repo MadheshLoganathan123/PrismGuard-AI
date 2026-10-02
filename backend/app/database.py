@@ -107,7 +107,37 @@ def init_db():
             conn.execute("CREATE INDEX IF NOT EXISTS idx_research_test_id ON research_results (test_id);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_research_timestamp ON research_results (timestamp DESC);")
 
+            # Seed catalog if empty
+            count_row = conn.execute("SELECT COUNT(*) FROM test_catalog;").fetchone()
+            if count_row and count_row[0] == 0:
+                catalog_path = settings.database_path.parent.parent / "research" / "test_cases" / "catalog.json"
+                if catalog_path.exists():
+                    try:
+                        with open(catalog_path, "r", encoding="utf-8") as f:
+                            entries = json.load(f)
+                        for tc in entries:
+                            conn.execute("""
+                            INSERT OR IGNORE INTO test_catalog (
+                                test_id, category, attack_class, name, transformation, purpose,
+                                raw_input, canonical_input, input_sha256, input_length,
+                                expected_label, expected_guard_behavior, observed_guard_behavior,
+                                our_mitigation, reproducible_runs, mitigation_note
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                tc.get("test_id"), tc.get("category"), tc.get("attack_class"),
+                                tc.get("name"), tc.get("transformation"), tc.get("purpose"),
+                                tc.get("raw_input"), tc.get("canonical_input"), tc.get("input_sha256"),
+                                tc.get("input_length", 0), tc.get("expected_label"),
+                                tc.get("expected_guard_behavior"), tc.get("observed_guard_behavior"),
+                                tc.get("our_mitigation"), tc.get("reproducible_runs"),
+                                tc.get("mitigation_note")
+                            ))
+                        logger.info("Seeded %d test cases into test_catalog table", len(entries))
+                    except Exception as e:
+                        logger.warning("Could not seed test_catalog: %s", e)
+
         logger.info("PrismGuard AI SQLite database initialized successfully at %s", settings.database_path)
+
     finally:
         conn.close()
 

@@ -340,7 +340,12 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {latestEvents.map(evt => (
+              {latestEvents.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  No audit events recorded yet. Ready to capture live traffic from chat or attack tests.
+                </div>
+              ) : (
+                latestEvents.map(evt => (
                 <div 
                   key={evt.id}
                   onClick={() => onSelectAudit(evt)}
@@ -371,7 +376,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     <span>Risk: {evt.risk_score}/100 • {evt.total_latency_ms}ms</span>
                   </div>
                 </div>
-              ))}
+              )))}
             </div>
           </div>
 

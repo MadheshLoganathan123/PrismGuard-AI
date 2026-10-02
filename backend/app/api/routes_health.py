@@ -49,3 +49,10 @@ async def health_check() -> Dict[str, Any]:
         },
         "config_summary": settings.get_safe_summary()
     }
+
+
+@router.get("/api/guard/usage")
+async def get_guard_usage() -> Dict[str, Any]:
+    """Returns live Guard quota usage from the /v1/usage endpoint."""
+    return await guard_client.get_usage()
+

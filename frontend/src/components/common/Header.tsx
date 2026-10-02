@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, RefreshCw, Zap, Clock, Activity, Menu, X, ShieldAlert } from 'lucide-react';
+import { Shield, RefreshCw, Clock, Activity, Menu, X, ShieldAlert } from 'lucide-react';
 import type { ActiveTab } from '../../types';
 
 interface HeaderProps {
-  quotaUsed: number;
-  quotaTotal: number;
+  quotaUsed?: number;
+  quotaTotal?: number;
   isLiveMode: boolean;
   setIsLiveMode: (live: boolean) => void;
   resetToDemoState: () => void;
@@ -15,8 +15,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  quotaUsed,
-  quotaTotal,
   isLiveMode,
   setIsLiveMode,
   resetToDemoState,
@@ -34,9 +32,6 @@ export const Header: React.FC<HeaderProps> = ({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  const remaining = quotaTotal - quotaUsed;
-  const quotaPct = Math.round((remaining / quotaTotal) * 100);
 
   return (
     <header className="header-bar" style={{
@@ -87,22 +82,6 @@ export const Header: React.FC<HeaderProps> = ({
             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Adaptive Defense Layer</div>
           </div>
         </div>
-
-        {/* Quota Banner */}
-        <div className="hide-on-mobile" style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: 'rgba(245, 158, 11, 0.08)',
-          border: '1px solid rgba(245, 158, 11, 0.25)',
-          padding: '4px 10px',
-          borderRadius: '20px',
-          fontSize: '11px',
-          color: 'var(--status-warn)'
-        }}>
-          <Zap size={13} />
-          <span><strong>Guard quota:</strong> {quotaPct}% ({remaining}/{quotaTotal} remaining)</span>
-        </div>
       </div>
 
       {/* Center: Demo Safeguard Notice */}
@@ -152,15 +131,15 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{isLiveMode ? 'LIVE API' : 'SIMULATED'}</span>
         </button>
 
-        {/* Reset State */}
+        {/* Reset / Sync State */}
         <button
           onClick={resetToDemoState}
           className="btn btn-secondary"
           style={{ fontSize: '11px', padding: '5px 10px' }}
-          title="Reset demonstration state to original benchmark"
+          title="Clear active chat session and re-sync latest telemetry from SQLite"
         >
           <RefreshCw size={12} />
-          <span className="hide-on-mobile">Reset Demo</span>
+          <span className="hide-on-mobile">Clear & Sync</span>
         </button>
       </div>
     </header>

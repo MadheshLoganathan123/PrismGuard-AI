@@ -20,11 +20,22 @@ CATALOG_PATH = ROOT_DIR / "research" / "test_cases" / "catalog.json"
 
 
 def load_test_catalog() -> List[Dict[str, Any]]:
-    """Loads standardized test catalog from JSON."""
-    if not CATALOG_PATH.exists():
-        return []
-    with open(CATALOG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    """Loads standardized test catalog from SQLite test_catalog table with JSON fallback."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT * FROM test_catalog ORDER BY test_id ASC")
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        if rows:
+            return rows
+    except Exception:
+        pass
+
+    if CATALOG_PATH.exists():
+        with open(CATALOG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
 
 
 @router.get("/test-cases", response_model=List[TestCaseModel])

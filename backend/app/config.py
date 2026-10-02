@@ -19,17 +19,30 @@ class Settings:
     """
     def __init__(self):
         # SecureAI Guard settings
-        self.guard_url: str = os.getenv("GUARD_URL", "https://api.secureai.example.com").rstrip("/")
-        self.guard_token: str = os.getenv("GUARD_TOKEN", "").strip()
-        self.guard_timeout_seconds: float = float(os.getenv("GUARD_TIMEOUT_SECONDS", "5.0"))
+        guard_url_raw = (
+            os.getenv("GUARD_URL")
+            or os.getenv("SECURE_GUARD_API_URL")
+            or "https://secureai-guard-598609297408.europe-west4.run.app"
+        )
+        self.guard_url: str = guard_url_raw.strip().strip('"').strip("'").strip().rstrip("/")
+
+        guard_token_raw = (
+            os.getenv("GUARD_TOKEN")
+            or os.getenv("SECURE_GUARD_TOKEN")
+            or os.getenv("SCURE_GUARD_TOKEN")
+            or ""
+        )
+        self.guard_token: str = guard_token_raw.strip().strip('"').strip("'").strip()
+        self.guard_timeout_seconds: float = float(os.getenv("GUARD_TIMEOUT_SECONDS", "8.0"))
         self.guard_max_retries: int = int(os.getenv("GUARD_MAX_RETRIES", "2"))
         self.guard_research_budget: int = int(os.getenv("GUARD_RESEARCH_BUDGET", "120"))
 
         # LLM settings
-        self.llm_base_url: str = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        self.llm_api_key: str = os.getenv("LLM_API_KEY", "").strip()
-        self.llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
-        self.llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "15.0"))
+        self.llm_base_url: str = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").strip().strip('"').strip("'").rstrip("/")
+        llm_api_key_raw = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+        self.llm_api_key: str = "".join(llm_api_key_raw.split()).strip().strip('"').strip("'").strip()
+        self.llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini").strip().strip('"').strip("'").strip()
+        self.llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "20.0"))
 
         # Application & Gateway settings
         self.environment: str = os.getenv("ENVIRONMENT", "development").strip().lower()

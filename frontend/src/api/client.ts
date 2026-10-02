@@ -134,5 +134,14 @@ export const apiClient = {
     const res = await fetch(`${API_BASE_URL}/api/health`);
     if (!res.ok) throw new Error(`Health check returned ${res.status}`);
     return res.json();
+  },
+
+  /**
+   * Fetches live Guard quota usage from /api/guard/usage
+   */
+  async getGuardUsage(): Promise<any> {
+    const res = await fetch(`${API_BASE_URL}/api/guard/usage`);
+    if (!res.ok) throw new Error(`Guard usage returned ${res.status}`);
+    return res.json();
   }
 };

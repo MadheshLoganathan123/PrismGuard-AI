@@ -74,6 +74,8 @@ export function App() {
               setActiveTab={store.setActiveTab}
               onSendToChat={store.sendChatMessage}
               onSelectAudit={store.setSelectedAuditDrawerEvent}
+              testPromptOnBackend={store.testPromptOnBackend}
+              isLiveMode={store.isLiveMode}
             />
           )}
 
@@ -98,6 +100,8 @@ export function App() {
             <AuditView
               auditEvents={store.auditEvents}
               onSelectAudit={store.setSelectedAuditDrawerEvent}
+              onRefresh={store.refreshAuditEvents}
+              isRefreshing={store.isProcessing}
             />
           )}
 

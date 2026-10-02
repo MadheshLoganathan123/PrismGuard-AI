@@ -5,13 +5,16 @@ import {
   RefreshCw, 
   Copy, 
   Check, 
-  MessageSquare
+  MessageSquare,
+  Zap,
+  Loader2
 } from 'lucide-react';
 import type { TestCase, ActiveTab, AuditEvent } from '../../types';
 import { normalizeInput } from '../../engine/normalizer';
 import { detectCustomWeakness } from '../../engine/customDetector';
 import { computeRiskScore } from '../../engine/riskEngine';
 import { evaluatePolicy } from '../../engine/policyEngine';
+import type { ChatApiResponse } from '../../api/client';
 
 interface AttackLabViewProps {
   testCases: TestCase[];
@@ -20,6 +23,8 @@ interface AttackLabViewProps {
   setActiveTab: (tab: ActiveTab) => void;
   onSendToChat: (text: string, presetId?: string) => void;
   onSelectAudit: (event: AuditEvent) => void;
+  testPromptOnBackend?: (text: string, presetId?: string) => Promise<ChatApiResponse>;
+  isLiveMode?: boolean;
 }
 
 export const AttackLabView: React.FC<AttackLabViewProps> = ({
@@ -28,11 +33,31 @@ export const AttackLabView: React.FC<AttackLabViewProps> = ({
   setActivePreset,
   setActiveTab,
   onSendToChat,
-  onSelectAudit
+  onSelectAudit,
+  testPromptOnBackend,
+  isLiveMode = false
 }) => {
   const [currentInput, setCurrentInput] = useState<string>(activePreset.raw_input);
   const [selectedHypothesis, setSelectedHypothesis] = useState<string>('ALL');
   const [copiedRaw, setCopiedRaw] = useState<boolean>(false);
+  const [liveResult, setLiveResult] = useState<ChatApiResponse | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+
+  const handleRunOnBackend = async () => {
+    if (!testPromptOnBackend || isRunning) return;
+    setIsRunning(true);
+    setLiveError(null);
+    setLiveResult(null);
+    try {
+      const res = await testPromptOnBackend(currentInput, activePreset.test_id);
+      setLiveResult(res);
+    } catch (e: any) {
+      setLiveError(e?.message || 'Backend request failed');
+    } finally {
+      setIsRunning(false);
+    }
+  };
 
   // Compute live normalization and local signals for current input
   const liveNorm = normalizeInput(currentInput);
@@ -112,17 +137,34 @@ export const AttackLabView: React.FC<AttackLabViewProps> = ({
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {isLiveMode && (
+              <span className="badge badge-allow" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--status-allow)' }} />
+                Live Gateway
+              </span>
+            )}
+            {testPromptOnBackend && (
+              <button
+                onClick={handleRunOnBackend}
+                disabled={isRunning}
+                className="btn btn-primary"
+                style={{ fontSize: '12px', padding: '8px 14px', opacity: isRunning ? 0.7 : 1 }}
+              >
+                {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                <span>{isRunning ? 'Running on Backend...' : isLiveMode ? 'Run on Live Gateway' : 'Run on Backend'}</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 onSendToChat(currentInput, activePreset.test_id);
                 setActiveTab('chat');
               }}
-              className="btn btn-primary"
+              className="btn btn-secondary"
               style={{ fontSize: '12px', padding: '8px 14px' }}
             >
               <MessageSquare size={14} />
-              <span>Send to Protected Chat</span>
+              <span>Send to Chat</span>
             </button>
           </div>
         </div>
@@ -342,6 +384,40 @@ export const AttackLabView: React.FC<AttackLabViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Live Backend Result Banner */}
+        {(liveResult || liveError) && (
+          <div style={{
+            gridColumn: '1 / -1',
+            padding: '14px 20px',
+            borderRadius: '10px',
+            border: liveError ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(16,185,129,0.5)',
+            background: liveError ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '16px'
+          }}>
+            {liveError ? (
+              <span style={{ fontSize: '12px', color: 'var(--status-block)' }}>⚠️ {liveError}</span>
+            ) : liveResult && (
+              <>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-allow)' }}>✅ Live Backend Response</span>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>Decision: <strong style={{ color: liveResult.decision === 'ALLOW' ? 'var(--status-allow)' : liveResult.decision === 'BLOCK' ? 'var(--status-block)' : 'var(--status-warn)' }}>{liveResult.decision}</strong></span>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>Risk: <strong>{liveResult.risk_score}/100 ({liveResult.risk_band})</strong></span>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>GW: {liveResult.request_id}</span>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>Latency: {liveResult.stage_latencies.guard_prompt + liveResult.stage_latencies.detector}ms guard+detect</span>
+                <button
+                  onClick={() => onSelectAudit(liveResult.audit_event)}
+                  className="btn-ghost"
+                  style={{ fontSize: '10px', padding: '3px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: 'var(--brand-cyan)', border: '1px solid rgba(6,182,212,0.3)' }}
+                >
+                  Inspect Telemetry →
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Right Column: PrismGuard AI Security Gateway */}
         <div className="glass-panel" style={{
