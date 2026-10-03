@@ -22,13 +22,19 @@ export interface StageLatencies {
 export interface TestCase {
   test_id: string;
   category: string;
+  attack_class?: string;
   name: string;
-  description: string;
+  transformation?: string;
+  purpose?: string;
+  description?: string;
   raw_input: string;
   canonical_input: string;
   input_sha256: string;
   input_length: number;
   expected_label: 'attack-like' | 'benign' | 'output' | 'error';
+  expected_guard_behavior?: string;
+  observed_guard_behavior?: string;
+  our_mitigation?: string;
   guard_allowed: boolean;
   guard_status: 'complete' | 'partial' | 'error';
   guard_flags: string[];

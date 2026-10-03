@@ -86,14 +86,29 @@ export function useAppStore() {
       }
 
       // Fetch SQLite audit events
-      const liveEvents = await apiClient.getAuditEvents(100);
-      if (liveEvents && liveEvents.length > 0) {
+      const eventsRaw = await apiClient.getAuditEvents(100);
+      const liveEvents: AuditEvent[] = Array.isArray(eventsRaw)
+        ? eventsRaw
+        : Array.isArray((eventsRaw as any)?.events)
+          ? (eventsRaw as any).events
+          : Array.isArray((eventsRaw as any)?.items)
+            ? (eventsRaw as any).items
+            : [];
+      if (liveEvents.length > 0) {
         setAuditEvents(liveEvents);
       }
 
       // Fetch test catalog
-      const catalog = await apiClient.getTestCases();
-      if (catalog && catalog.length > 0) {
+      const catalogRaw = await apiClient.getTestCases();
+      // Backend may return a plain array OR a wrapped object like { test_cases: [...] }
+      const catalog: TestCase[] = Array.isArray(catalogRaw)
+        ? catalogRaw
+        : Array.isArray((catalogRaw as any)?.test_cases)
+          ? (catalogRaw as any).test_cases
+          : Array.isArray((catalogRaw as any)?.items)
+            ? (catalogRaw as any).items
+            : [];
+      if (catalog.length > 0) {
         setTestCasesList(catalog);
       }
 

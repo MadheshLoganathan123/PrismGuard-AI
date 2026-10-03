@@ -37,10 +37,32 @@ export interface ResearchBatchResponse {
   run_id: string;
   timestamp: string;
   tests_executed: number;
-  results: any[];
+  results: ResearchTestResult[];
   quota_used_in_run: number;
   total_quota_consumed: number;
   budget_limit: number;
+}
+
+export interface ResearchTestResult {
+  id: string;
+  test_id: string;
+  run_id: string;
+  timestamp: string;
+  category: string;
+  description: string;
+  input_sha256: string;
+  input_length: number;
+  guard_allowed: number | null;  // 1=allowed, 0=blocked, null=error
+  guard_status: string;
+  guard_flags: string[];
+  guard_latency_ms: number;
+  guard_request_id?: string;
+  prism_score: number;
+  prism_signals: string[];
+  prism_action: string;
+  expected_label: string;
+  disagreement: number;  // 1 = Guard allowed but PrismGuard flagged
+  notes: string;
 }
 
 export const apiClient = {
@@ -82,6 +104,29 @@ export const apiClient = {
     }
 
     return res.json();
+  },
+
+  /**
+   * Runs a single test case through the full research pipeline (Guard + PrismGuard).
+   * Used by Attack Lab "Run on Live Gateway" button.
+   */
+  async runSingleResearchTest(testId: string): Promise<ResearchTestResult> {
+    const res = await fetch(`${API_BASE_URL}/api/research/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_ids: [testId] })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `Research run failed (${res.status})`);
+    }
+
+    const data: ResearchBatchResponse = await res.json();
+    if (!data.results || data.results.length === 0) {
+      throw new Error('No results returned from research run');
+    }
+    return data.results[0];
   },
 
   /**
