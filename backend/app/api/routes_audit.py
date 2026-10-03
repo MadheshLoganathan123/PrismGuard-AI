@@ -13,11 +13,13 @@ async def list_audit_events(
     offset: int = Query(default=0, ge=0),
     decision: Optional[str] = Query(default=None),
     risk_band: Optional[str] = Query(default=None),
+    execution_mode: Optional[str] = Query(default=None),
     user: AuthenticatedUser = Depends(require_viewer)
 ):
     """
     Returns paginated audit trail events scoped to the caller's tenant.
     Responses contain only privacy-preserving hashes — never raw prompts.
+    Supports filtering by decision, risk_band, and execution_mode.
     Requires: VIEWER, RESEARCHER, or ADMIN role.
     """
     events = query_audit_events(
@@ -25,6 +27,7 @@ async def list_audit_events(
         offset=offset,
         decision=decision,
         risk_band=risk_band,
+        execution_mode=execution_mode,
         tenant_id=user.tenant_id
     )
     # Strip request_summary from all returned events to prevent prompt exposure

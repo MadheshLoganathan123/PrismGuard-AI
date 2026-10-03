@@ -59,7 +59,7 @@ FastAPI Security Gateway
 
 ## 4. Configuration & `.env` Setup
 
-Copy [.env.example](file:///.env.example) to `.env` in the repository root:
+Copy [.env.example](.env.example) to `.env` in the repository root:
 
 ```bash
 cp .env.example .env
@@ -77,6 +77,8 @@ cp .env.example .env
 | `LLM_BASE_URL` | Base URL for configured LLM API (OpenAI-compatible) | `https://api.openai.com/v1` |
 | `LLM_API_KEY` | Provider API key (server-side only) | *(empty / placeholder)* |
 | `LLM_MODEL` | LLM model identifier | `gpt-4o-mini` |
+| `PRISMGUARD_API_KEYS` | Comma-separated gateway keys in `key:ROLE:tenant_id` format | Built-in local development keys |
+| `PRISMGUARD_AUTH_ENABLED` | Enable API-key authentication | `true` |
 | `DATABASE_PATH` | Local SQLite database file path | `backend/prismguard.db` |
 | `AUDIT_LOG_JSONL_PATH` | JSONL export path for audit events | `research/results/audit_events.jsonl` |
 | `RESEARCH_RESULTS_PATH` | JSONL export path for research findings | `research/results/research_findings.jsonl` |
@@ -84,6 +86,8 @@ cp .env.example .env
 
 > [!NOTE]
 > When `GUARD_TOKEN` or `LLM_API_KEY` are left blank or contain placeholders, PrismGuard AI automatically operates in resilient **high-fidelity simulation mode**, faithfully reproducing the test matrix behaviors for offline demonstrations, unit tests, and local evaluation.
+
+The Protected Chat settings panel accepts a gateway API key from `PRISMGUARD_API_KEYS`. Configure the LLM provider key only in the backend `.env`; it is never sent to or stored by the browser. Restart the backend after changing `.env`.
 
 ---
 

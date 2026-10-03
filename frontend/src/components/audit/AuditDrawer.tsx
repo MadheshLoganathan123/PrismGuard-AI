@@ -1,11 +1,20 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Shield, Layers, FileText } from 'lucide-react';
+import { X, Copy, Check, Shield, Layers, FileText, CheckCircle, AlertTriangle, AlertCircle, ShieldAlert, Ban } from 'lucide-react';
 import type { AuditEvent } from '../../types';
-import { Badge } from '../common/Badge';
 
 interface AuditDrawerProps {
   event: AuditEvent | null;
   onClose: () => void;
+}
+
+function DecisionBadge({ decision, showIcon = true }: { decision: AuditEvent['policy_decision']; showIcon?: boolean }) {
+  const config = {
+    ALLOW: ['badge-allow', CheckCircle, 'ALLOWED'], WARN: ['badge-warn', AlertTriangle, 'WARN'],
+    REVIEW: ['badge-review', AlertCircle, 'REVIEW'], REVIEW_GUARD_BLOCK: ['badge-review', ShieldAlert, 'REVIEW (GUARD BLOCK)'],
+    BLOCK: ['badge-block', Ban, 'BLOCK'], REDACT: ['badge-info', FileText, 'REDACT'],
+  } as const;
+  const [className, Icon, label] = config[decision] || ['badge-info', FileText, decision];
+  return <span className={`badge ${className}`}>{showIcon && <Icon size={11} />}<span>{label}</span></span>;
 }
 
 export const AuditDrawer: React.FC<AuditDrawerProps> = ({ event, onClose }) => {
@@ -60,7 +69,7 @@ export const AuditDrawer: React.FC<AuditDrawerProps> = ({ event, onClose }) => {
         {/* Action Bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Badge decision={event.policy_decision} />
+            <DecisionBadge decision={event.policy_decision} />
             <span style={{
               fontSize: 11,
               fontFamily: 'var(--font-mono)',
@@ -145,7 +154,7 @@ export const AuditDrawer: React.FC<AuditDrawerProps> = ({ event, onClose }) => {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {i === 3
-                      ? <Badge decision={event.policy_decision} showIcon={false} />
+                      ? <DecisionBadge decision={event.policy_decision} showIcon={false} />
                       : <span style={{ fontSize: 11, color: ran ? (i === 1 && event.local_signals?.length > 0 && event.risk_score >= 40 ? 'var(--status-review)' : 'var(--status-allow)') : 'var(--text-disabled)' }}>
                           {ran ? (i === 1 && event.local_signals?.length > 0 && event.risk_score >= 40 ? 'FLAGS RAISED' : i === 2 ? (isAllowed ? 'ALLOW' : 'BLOCK') : 'PASSED') : (isBlockedOrReviewed && i >= 4 ? 'SKIPPED' : 'NOT RAN')}
                         </span>

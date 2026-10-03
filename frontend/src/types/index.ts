@@ -1,3 +1,5 @@
+import type { DomainAuditMetadata, DomainRoutingEvent } from './domainRouting';
+
 export type DecisionType = 
   | 'ALLOW' 
   | 'WARN' 
@@ -71,6 +73,7 @@ export interface AuditEvent {
   stage_latencies: StageLatencies;
   policy_rationale: string;
   request_summary?: string;
+  domain_metadata?: DomainAuditMetadata;
 }
 
 export interface ChatMessage {
@@ -83,6 +86,7 @@ export interface ChatMessage {
   risk_score?: number;
   risk_band?: RiskBand;
   telemetry?: AuditEvent;
+  routing?: DomainRoutingEvent;
 }
 
 export interface ServiceHealth {
@@ -103,4 +107,5 @@ export type ActiveTab =
   | 'dashboard' 
   | 'research' 
   | 'audit' 
-  | 'health';
+  | 'health'
+  | 'domain-routing';

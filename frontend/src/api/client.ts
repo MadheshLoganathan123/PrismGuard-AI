@@ -1,8 +1,18 @@
 import type { AuditEvent, TestCase, DecisionType, RiskBand, ExecutionMode } from '../types';
 
-const RAW_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
+const RAW_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
 const DEFAULT_API_KEY = (import.meta as any).env?.VITE_PRISMGUARD_API_KEY || 'pg-admin-key-2026';
+
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+  }
+}
 
 export interface ChatApiResponse {
   request_id: string;
@@ -121,7 +131,7 @@ export const apiClient = {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || err.message || `Server returned ${res.status}`);
+      throw new ApiRequestError(err.detail || err.message || `Server returned ${res.status}`, res.status);
     }
 
     return res.json();

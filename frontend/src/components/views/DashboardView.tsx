@@ -1,8 +1,17 @@
 import React from 'react';
-import { BarChart3, RefreshCw, Calendar, FileText, CheckCircle2, Eye, AlertTriangle, Zap, Database } from 'lucide-react';
+import { BarChart3, RefreshCw, Calendar, FileText, CheckCircle2, Eye, AlertTriangle, Zap, Database, GitBranch, Shield, RefreshCcw } from 'lucide-react';
 import type { AuditEvent, TestCase } from '../../types';
+import type { DomainRoutingEvent, ReviewItem, SimulatedModelUpdate } from '../../types/domainRouting';
+import { DOMAIN_DEMO_METRICS } from '../../data/domainRoutingMockData';
 
-interface Props { auditEvents: AuditEvent[]; testCases: TestCase[]; }
+interface Props {
+  auditEvents: AuditEvent[];
+  testCases: TestCase[];
+  routingEvents?: DomainRoutingEvent[];
+  reviewQueue?: ReviewItem[];
+  modelUpdates?: SimulatedModelUpdate[];
+}
+
 
 /* ── Sparkline ── */
 function Spark({ data, color, w = 72, h = 28 }: { data: number[]; color: string; w?: number; h?: number }) {
@@ -88,7 +97,8 @@ function decisionBadge(d: string) {
   return 'badge-gray';
 }
 
-export const DashboardView: React.FC<Props> = ({ auditEvents, testCases: _testCases }) => {
+export const DashboardView: React.FC<Props> = ({ auditEvents, testCases: _testCases, reviewQueue = [], modelUpdates: _modelUpdates = [] }) => {
+
   const total    = auditEvents.length;
   const allowed  = auditEvents.filter(e => e.policy_decision === 'ALLOW').length;
   const reviewed = auditEvents.filter(e => e.policy_decision?.startsWith('REVIEW')).length;
@@ -128,7 +138,7 @@ export const DashboardView: React.FC<Props> = ({ auditEvents, testCases: _testCa
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="simple-dashboard" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── Page header ── */}
       <div className="page-header">
@@ -334,6 +344,54 @@ export const DashboardView: React.FC<Props> = ({ auditEvents, testCases: _testCa
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── Domain Routing Metrics ── */}
+      <div className="card card-p" style={{ marginTop: 0 }}>
+        <div className="section-hdr">
+          <div>
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <GitBranch size={15} color="#4F46E5" /> Domain Routing &amp; Data Boundary Metrics
+            </div>
+            <div className="section-sub">Simulated telemetry — labeled demo dataset, not real domain system access</div>
+          </div>
+          <span style={{ fontSize: 9, fontWeight: 800, padding: '3px 7px', borderRadius: 5, background: '#EEF2FF', color: '#4338CA', border: '1px solid #C7D2FE' }}>SIMULATED DEMO</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr) repeat(3,1fr)', gap: 12, marginTop: 8 }}>
+          {[
+            { label: 'Banking', value: DOMAIN_DEMO_METRICS.banking, color: '#2563EB', bg: '#EFF6FF' },
+            { label: 'Government', value: DOMAIN_DEMO_METRICS.government, color: '#0284C7', bg: '#E0F2FE' },
+            { label: 'Company', value: DOMAIN_DEMO_METRICS.company, color: '#D97706', bg: '#FEF3C7' },
+            { label: 'Other Resources', value: DOMAIN_DEMO_METRICS.other, color: '#7C3AED', bg: '#EDE9FE' },
+            { label: 'Held for Review', value: DOMAIN_DEMO_METRICS.heldForReview, color: '#EA580C', bg: '#FFEDD5' },
+            { label: 'Blocked Before Routing', value: DOMAIN_DEMO_METRICS.blockedBeforeRouting, color: '#DC2626', bg: '#FEE2E2' },
+            { label: 'Cross-Domain Blocked', value: DOMAIN_DEMO_METRICS.crossDomainBlocked, color: '#7C3AED', bg: '#F5F3FF' },
+          ].map(m => (
+            <div key={m.label} style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${m.bg === '#EFF6FF' ? '#DBEAFE' : '#E2E8F0'}`, background: m.bg }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: m.color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: m.color, marginTop: 2 }}>{m.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 12 }}>
+          <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+            <div style={{ fontSize: 10, color: '#64748B', fontWeight: 600 }}>Avg Router Confidence</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#059669' }}>{DOMAIN_DEMO_METRICS.averageConfidence}%</div>
+          </div>
+          <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+            <div style={{ fontSize: 10, color: '#64748B', fontWeight: 600 }}>Pending Reviews</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#EA580C' }}>{reviewQueue.filter(r => r.status === 'PENDING').length || DOMAIN_DEMO_METRICS.pendingReviews}</div>
+          </div>
+          <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+            <div style={{ fontSize: 10, color: '#64748B', fontWeight: 600 }}>Regression Pass Rate (simulated)</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#4F46E5' }}>{DOMAIN_DEMO_METRICS.regressionPassRate}%</div>
+          </div>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 10, color: '#94A3B8', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Shield size={10} /> Synthetic read-only resources — no real Banking/Government/Company data</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><RefreshCcw size={10} /> No real ML retraining — simulation mode</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Database size={10} /> {DOMAIN_DEMO_METRICS.label}</span>
         </div>
       </div>
     </div>

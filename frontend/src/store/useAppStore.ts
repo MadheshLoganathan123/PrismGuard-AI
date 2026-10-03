@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ActiveTab, AuditEvent, ChatMessage, ServiceHealth, TestCase } from '../types';
+import type { DomainType, DomainRoutingEvent, ReviewItem, ReviewLabel, SimulatedModelUpdate } from '../types/domainRouting';
 import { TEST_CASES } from '../data/testCases';
 import { INITIAL_HEALTH_STATUS } from '../data/mockHealth';
+import { INITIAL_ROUTING_EVENTS } from '../data/domainRoutingMockData';
+import { INITIAL_REVIEW_QUEUE } from '../data/mockReviewQueue';
+import { INITIAL_MODEL_UPDATES } from '../data/mockModelUpdates';
 import { runSecurityPipeline } from '../engine/simulator';
-import { apiClient, type ChatApiResponse } from '../api/client';
+import { runDomainRoutingPipeline, screeningFromAudit } from '../engine/domainPipeline';
+import { applyReviewResolution, buildSimulatedUpdate, runSimulatedRegression, rollbackSimulatedUpdate } from '../engine/feedbackLoop';
+import { apiClient, ApiRequestError, type ChatApiResponse } from '../api/client';
 
 export function useAppStore() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
@@ -81,6 +87,16 @@ export function useAppStore() {
               endpoint: 'backend/prismguard.db'
             };
           }
+          if (h.id === 'health-guard-quota') {
+            return {
+              ...h,
+              status: 'READY',
+              latency_ms: 5,
+              details: `Guard quota monitored via /api/guard/usage`,
+              last_checked: new Date().toLocaleTimeString() + ' UTC',
+              endpoint: '/api/guard/usage'
+            };
+          }
           return h;
         }));
       }
@@ -113,23 +129,31 @@ export function useAppStore() {
       }
 
       // Fetch live Guard quota
+      let quotaSetFromGuard = false;
       try {
         const usage = await apiClient.getGuardUsage();
         if (usage?.used_today !== undefined) {
           setQuotaUsed(usage.used_today);
           setQuotaTotal(usage.daily_limit || 1000);
+          quotaSetFromGuard = true;
         } else if (usage?.calls_used !== undefined) {
           setQuotaUsed(usage.calls_used);
           setQuotaTotal(usage.budget_limit || 120);
+          quotaSetFromGuard = true;
         }
-      } catch { /* quota fetch optional */ }
+      } catch { /* quota fetch optional — requires VIEWER+ role */ }
 
-      // Fetch research metrics (as fallback for quota)
-      const researchData = await apiClient.getResearchResults();
-      if (researchData && researchData.metrics && quotaUsed === 0) {
-        if (researchData.metrics.budget_calls_made !== undefined) {
-          setQuotaUsed(researchData.metrics.budget_calls_made);
-        }
+      // Fetch research metrics (as fallback for quota if guard usage not available)
+      if (!quotaSetFromGuard) {
+        try {
+          const researchData = await apiClient.getResearchResults();
+          if (researchData?.metrics?.budget_calls_made !== undefined) {
+            setQuotaUsed(researchData.metrics.budget_calls_made);
+          }
+          if (researchData?.metrics?.budget_ceiling !== undefined) {
+            setQuotaTotal(researchData.metrics.budget_ceiling);
+          }
+        } catch { /* research metrics fetch optional */ }
       }
     } catch (e) {
       console.warn('Backend sync failed, running in fallback mode:', e);
@@ -142,6 +166,91 @@ export function useAppStore() {
   }, [syncWithBackend]);
 
   const [fallbackActive, setFallbackActive] = useState<boolean>(false);
+  const [activeDomainRoutingEvent, setActiveDomainRoutingEvent] = useState<DomainRoutingEvent | null>(null);
+  const [routingEvents, setRoutingEvents] = useState<DomainRoutingEvent[]>(INITIAL_ROUTING_EVENTS);
+  const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>(INITIAL_REVIEW_QUEUE);
+  const [modelUpdates, setModelUpdates] = useState<SimulatedModelUpdate[]>(INITIAL_MODEL_UPDATES);
+  const [activeRoutingPolicyVersion] = useState('v1.1.0');
+  const [selectedDomain, setSelectedDomain] = useState<DomainType | 'ALL'>('ALL');
+  const [routingMode, setRoutingMode] = useState<'LIVE' | 'SIMULATED'>('SIMULATED');
+  const [lastRegressionSummary, setLastRegressionSummary] = useState<string | null>(null);
+
+  const ingestRoutingResult = (event: DomainRoutingEvent, reviewItem: ReviewItem | null, auditEvent: AuditEvent) => {
+    setActiveDomainRoutingEvent(event);
+    setRoutingEvents(prev => [event, ...prev]);
+    if (reviewItem) setReviewQueue(prev => [reviewItem, ...prev]);
+    setAuditEvents(prev => [auditEvent, ...prev.filter(e => e.id !== auditEvent.id)]);
+  };
+
+  const runDomainRouting = async (prompt: string, scenarioId?: string) => {
+    if (!prompt.trim() || isProcessing) return null;
+    setIsProcessing(true);
+    try {
+      setRoutingMode(isLiveMode ? 'LIVE' : 'SIMULATED');
+      const executionMode = fallbackActive ? 'LOCAL_FALLBACK' : 'SIMULATED';
+      const result = await runDomainRoutingPipeline(prompt, {
+        executionMode,
+        scenarioId,
+        forcedTestCaseId: scenarioId?.startsWith('DOM-') ? scenarioId : undefined,
+      });
+      ingestRoutingResult(result.event, result.reviewItem, result.auditEvent);
+      return result;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const createReviewItem = (eventId: string) => {
+    const event = routingEvents.find(e => e.id === eventId) || activeDomainRoutingEvent;
+    if (!event) return;
+    const item: ReviewItem = {
+      id: 'rev-' + Math.random().toString(36).slice(2, 9),
+      createdAt: new Date().toISOString(),
+      status: 'PENDING',
+      priority: event.policyDecision === 'BLOCK' ? 'HIGH' : 'MEDIUM',
+      promptHash: event.promptHash,
+      redactedPromptPreview: event.redactedPromptPreview,
+      selectedDomain: event.routing.selectedDomain,
+      proposedDomain: event.routing.selectedDomain,
+      decision: event.policyDecision,
+      riskScore: event.screening.riskScore,
+      riskBand: event.screening.riskBand,
+      matchedSignals: event.routing.matchedSignals,
+      reason: 'Manually queued from Domain Routing Lab',
+      feedbackStatus: 'NONE',
+      eventId: event.id,
+      executionMode: event.executionMode,
+    };
+    setReviewQueue(prev => [item, ...prev]);
+    setActiveDomainRoutingEvent({ ...event, reviewRequired: true, reviewItemId: item.id });
+  };
+
+  const resolveReviewItem = (id: string, label: ReviewLabel, notes: string) => {
+    setReviewQueue(prev => prev.map(item => item.id === id ? applyReviewResolution(item, label, notes) : item));
+  };
+
+  const simulateRuleUpdate = (reviewIds: string[]) => {
+    const reviews = reviewQueue.filter(r => reviewIds.includes(r.id));
+    if (reviews.length === 0) return;
+    const drafted = buildSimulatedUpdate(reviews, activeRoutingPolicyVersion);
+    setModelUpdates(prev => [drafted, ...prev]);
+    setReviewQueue(prev => prev.map(r => reviewIds.includes(r.id) ? { ...r, feedbackStatus: 'APPLIED' } : r));
+  };
+
+  const runRoutingRegressionSuite = () => {
+    const draft = modelUpdates.find(u => u.status === 'DRAFT' || u.status === 'READY_FOR_APPROVAL');
+    if (draft) {
+      const updated = runSimulatedRegression(draft);
+      setModelUpdates(prev => prev.map(u => u.id === draft.id ? updated : u));
+      setLastRegressionSummary(updated.regressionSummary);
+    } else {
+      setLastRegressionSummary('Simulated regression: 29/30 domain-boundary checks passed (96.7%). No real model retraining.');
+    }
+  };
+
+  const rollbackModelUpdate = (id: string) => {
+    setModelUpdates(prev => prev.map(u => u.id === id ? rollbackSimulatedUpdate(u) : u));
+  };
 
   // Send message through security pipeline
   const sendChatMessage = async (text: string, presetId?: string) => {
@@ -165,54 +274,76 @@ export function useAppStore() {
           resp.audit_event.execution_mode = liveMode;
           setFallbackActive(false);
 
+          const routed = await runDomainRoutingPipeline(text, {
+            executionMode: liveMode,
+            forcedTestCaseId: presetId,
+            screeningOverride: screeningFromAudit(resp.audit_event, liveMode),
+            existingAudit: resp.audit_event,
+          });
           const botMsg: ChatMessage = {
             id: 'msg-b-' + Date.now(),
             sender: 'assistant',
-            text: resp.assistant_text || 'No response generated.',
+            text: routed.message.text || resp.assistant_text || 'No response generated.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             execution_mode: liveMode,
-            decision: resp.decision,
+            decision: routed.event.policyDecision,
             risk_score: resp.risk_score,
             risk_band: resp.risk_band,
-            telemetry: resp.audit_event
+            telemetry: routed.auditEvent,
+            routing: routed.event,
           };
           userMsg.execution_mode = liveMode;
-          userMsg.decision = resp.decision;
+          userMsg.decision = routed.event.policyDecision;
           userMsg.risk_score = resp.risk_score;
           userMsg.risk_band = resp.risk_band;
-          userMsg.telemetry = resp.audit_event;
+          userMsg.telemetry = routed.auditEvent;
+          userMsg.routing = routed.event;
 
           setChatMessages(prev => [...prev.slice(0, -1), userMsg, botMsg]);
-          setAuditEvents(prev => [resp.audit_event, ...prev]);
+          ingestRoutingResult(routed.event, routed.reviewItem, routed.auditEvent);
           setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
           return;
         } catch (e: any) {
+          if (e instanceof ApiRequestError && (e.status === 401 || e.status === 403)) {
+            const authMessage: ChatMessage = {
+              id: 'msg-b-' + Date.now(),
+              sender: 'assistant',
+              text: e.status === 401
+                ? 'Gateway API key is missing. Open Chat settings and enter a key configured in PRISMGUARD_API_KEYS.'
+                : 'Gateway rejected this API key. Open Chat settings and use a key configured in PRISMGUARD_API_KEYS.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setChatMessages(prev => [...prev.slice(0, -1), userMsg, authMessage]);
+            return;
+          }
           console.warn('Live gateway call failed, executing with explicit LOCAL_FALLBACK:', e);
           setFallbackActive(true);
-          const { message: botMsg, auditEvent } = await runSecurityPipeline(text, presetId, 'LOCAL_FALLBACK');
+          const routed = await runDomainRoutingPipeline(text, { executionMode: 'LOCAL_FALLBACK', forcedTestCaseId: presetId });
           userMsg.execution_mode = 'LOCAL_FALLBACK';
-          userMsg.decision = auditEvent.policy_decision;
-          userMsg.risk_score = auditEvent.risk_score;
-          userMsg.risk_band = auditEvent.risk_band;
-          userMsg.telemetry = auditEvent;
+          userMsg.decision = routed.event.policyDecision;
+          userMsg.risk_score = routed.auditEvent.risk_score;
+          userMsg.risk_band = routed.auditEvent.risk_band;
+          userMsg.telemetry = routed.auditEvent;
+          userMsg.routing = routed.event;
 
-          setChatMessages(prev => [...prev.slice(0, -1), userMsg, botMsg]);
-          setAuditEvents(prev => [auditEvent, ...prev]);
+          setChatMessages(prev => [...prev.slice(0, -1), userMsg, routed.message]);
+          ingestRoutingResult(routed.event, routed.reviewItem, routed.auditEvent);
           setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
           return;
         }
       }
 
       // Offline / explicit simulator mode
-      const { message: botMsg, auditEvent } = await runSecurityPipeline(text, presetId, 'SIMULATED');
+      const routed = await runDomainRoutingPipeline(text, { executionMode: 'SIMULATED', forcedTestCaseId: presetId });
       userMsg.execution_mode = 'SIMULATED';
-      userMsg.decision = auditEvent.policy_decision;
-      userMsg.risk_score = auditEvent.risk_score;
-      userMsg.risk_band = auditEvent.risk_band;
-      userMsg.telemetry = auditEvent;
+      userMsg.decision = routed.event.policyDecision;
+      userMsg.risk_score = routed.auditEvent.risk_score;
+      userMsg.risk_band = routed.auditEvent.risk_band;
+      userMsg.telemetry = routed.auditEvent;
+      userMsg.routing = routed.event;
 
-      setChatMessages(prev => [...prev.slice(0, -1), userMsg, botMsg]);
-      setAuditEvents(prev => [auditEvent, ...prev]);
+      setChatMessages(prev => [...prev.slice(0, -1), userMsg, routed.message]);
+      ingestRoutingResult(routed.event, routed.reviewItem, routed.auditEvent);
       setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
     } finally {
       setIsProcessing(false);
@@ -227,33 +358,43 @@ export function useAppStore() {
       if (!resp.audit_event.execution_mode) {
         resp.audit_event.execution_mode = isLiveMode ? 'LIVE' : 'SIMULATED';
       }
-      setFallbackActive(false);
-      setAuditEvents(prev => [resp.audit_event, ...prev]);
+      const routed = await runDomainRoutingPipeline(text, {
+        executionMode: resp.audit_event.execution_mode || (isLiveMode ? 'LIVE' : 'SIMULATED'),
+        forcedTestCaseId: presetId,
+        screeningOverride: screeningFromAudit(resp.audit_event, resp.audit_event.execution_mode || 'LIVE'),
+        existingAudit: resp.audit_event,
+      });
+      ingestRoutingResult(routed.event, routed.reviewItem, routed.auditEvent);
       setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
-      return resp;
+      return {
+        ...resp,
+        decision: routed.event.policyDecision,
+        assistant_text: routed.message.text,
+        audit_event: routed.auditEvent,
+      };
     } catch (e) {
       console.warn('Backend prompt check failed, executing local fallback:', e);
       setFallbackActive(true);
-      const { message, auditEvent } = await runSecurityPipeline(text, presetId, 'LOCAL_FALLBACK');
-      setAuditEvents(prev => [auditEvent, ...prev]);
+      const routed = await runDomainRoutingPipeline(text, { executionMode: 'LOCAL_FALLBACK', forcedTestCaseId: presetId });
+      ingestRoutingResult(routed.event, routed.reviewItem, routed.auditEvent);
       return {
-        request_id: auditEvent.gateway_request_id,
-        decision: auditEvent.policy_decision,
-        risk_score: auditEvent.risk_score,
-        risk_band: auditEvent.risk_band,
-        assistant_text: message.text,
+        request_id: routed.auditEvent.gateway_request_id,
+        decision: routed.event.policyDecision,
+        risk_score: routed.auditEvent.risk_score,
+        risk_band: routed.auditEvent.risk_band,
+        assistant_text: routed.message.text,
         security: {
-          local_signals: auditEvent.local_signals,
+          local_signals: routed.auditEvent.local_signals,
           guard: {
-            status: auditEvent.guard_decision === 'PARTIAL' ? 'partial' : 'complete',
-            allowed: auditEvent.guard_decision === 'ALLOWED',
+            status: routed.auditEvent.guard_decision === 'PARTIAL' ? 'partial' : 'complete',
+            allowed: routed.auditEvent.guard_decision === 'ALLOWED',
             flags: [],
             checks: {},
-            latency_ms: auditEvent.stage_latencies.guard_prompt
+            latency_ms: routed.auditEvent.stage_latencies.guard_prompt
           }
         },
-        stage_latencies: auditEvent.stage_latencies,
-        audit_event: auditEvent
+        stage_latencies: routed.auditEvent.stage_latencies,
+        audit_event: routed.auditEvent
       };
     } finally {
       setIsProcessing(false);
@@ -389,6 +530,21 @@ export function useAppStore() {
     refreshData,
     refreshSession,
     resetToDemoState,
-    testCases: testCasesList
+    testCases: testCasesList,
+    activeDomainRoutingEvent,
+    routingEvents,
+    reviewQueue,
+    modelUpdates,
+    activeRoutingPolicyVersion,
+    selectedDomain,
+    setSelectedDomain,
+    routingMode,
+    lastRegressionSummary,
+    runDomainRouting,
+    createReviewItem,
+    resolveReviewItem,
+    simulateRuleUpdate,
+    runRoutingRegressionSuite,
+    rollbackModelUpdate,
   };
 }

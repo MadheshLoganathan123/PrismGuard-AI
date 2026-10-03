@@ -29,6 +29,7 @@ logger = logging.getLogger("prismguard.auth")
 class Role(str, Enum):
     ADMIN      = "ADMIN"       # Full access to all endpoints, all tenants
     RESEARCHER = "RESEARCHER"  # Can run research/execution endpoints
+    SECOPS     = "SECOPS"      # Security operations: can run research and view audit
     VIEWER     = "VIEWER"      # Read-only: audit, health, stats
 
 
@@ -194,12 +195,12 @@ async def require_admin(user: AuthenticatedUser = Depends(get_current_user)) -> 
 
 
 async def require_researcher(user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
-    """Dependency that restricts to ADMIN or RESEARCHER."""
-    user.require_role(Role.ADMIN, Role.RESEARCHER)
+    """Dependency that restricts to ADMIN, RESEARCHER, or SECOPS."""
+    user.require_role(Role.ADMIN, Role.RESEARCHER, Role.SECOPS)
     return user
 
 
 async def require_viewer(user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
-    """Dependency that allows ADMIN, RESEARCHER, or VIEWER (any authenticated user)."""
-    user.require_role(Role.ADMIN, Role.RESEARCHER, Role.VIEWER)
+    """Dependency that allows ADMIN, RESEARCHER, SECOPS, or VIEWER (any authenticated user)."""
+    user.require_role(Role.ADMIN, Role.RESEARCHER, Role.SECOPS, Role.VIEWER)
     return user

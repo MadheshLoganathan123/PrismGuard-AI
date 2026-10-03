@@ -99,7 +99,7 @@ export const HealthView: React.FC<HealthViewProps> = ({ healthStatuses, onRefres
   const quotaPct = Math.round((used / total) * 100);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="compact-health" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── Top Header ── */}
       <div
@@ -400,61 +400,64 @@ export const HealthView: React.FC<HealthViewProps> = ({ healthStatuses, onRefres
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr) 280px', gap: 16 }}>
 
         {/* Card 1: Service Status Details Table */}
-        <div className="card" style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <div className="card" style={{ background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', overflow: 'hidden', minWidth: 0 }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid #F1F5F9' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Service Status Details</span>
           </div>
 
-          <table className="tbl" style={{ margin: 0, width: '100%' }}>
-            <thead>
-              <tr style={{ background: '#F8FAFC' }}>
-                <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Service</th>
-                <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Status</th>
-                <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Endpoint / Details</th>
-                <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Latency</th>
-                <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Last Checked</th>
-                <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {healthStatuses.map(s => (
-                <tr key={s.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ fontSize: 12, fontWeight: 600, color: '#0F172A', padding: '10px 14px' }}>{s.name}</td>
-                  <td style={{ fontSize: 11, padding: '10px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span className={`dot ${s.status === 'READY' ? 'dot-allow' : s.status === 'DEGRADED' ? 'dot-warn' : 'dot-block'} animate-pulse-glow`} style={{ width: 6, height: 6 }} />
-                      <span style={{ color: s.status === 'READY' ? '#059669' : s.status === 'DEGRADED' ? '#D97706' : '#DC2626', fontWeight: 600 }}>{s.status}</span>
-                    </div>
-                  </td>
-                  <td style={{ fontSize: 11, color: '#64748B', fontFamily: 'var(--font-mono)', padding: '10px 14px' }}>{s.endpoint || s.details}</td>
-                  <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '10px 14px' }}>{s.latency_ms} ms</td>
-                  <td style={{ fontSize: 11, color: '#64748B', padding: '10px 14px' }}>{s.last_checked || 'Active'}</td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <button
-                      onClick={onRefreshHealth}
-                      disabled={isProcessing}
-                      style={{
-                        padding: '3px 8px',
-                        borderRadius: 6,
-                        background: '#EFF6FF',
-                        border: '1px solid #DBEAFE',
-                        color: '#2563EB',
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                        cursor: isProcessing ? 'not-allowed' : 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <ExternalLink size={10} />
-                      Test
-                    </button>
-                  </td>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl" style={{ margin: 0, width: '100%', minWidth: 580 }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC' }}>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 12px', whiteSpace: 'nowrap' }}>Service</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 10px', whiteSpace: 'nowrap' }}>Status</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 10px' }}>Endpoint / Details</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 10px', whiteSpace: 'nowrap' }}>Latency</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 10px', whiteSpace: 'nowrap' }}>Last Checked</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 10px', whiteSpace: 'nowrap' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {healthStatuses.map(s => (
+                  <tr key={s.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ fontSize: 12, fontWeight: 600, color: '#0F172A', padding: '10px 12px', whiteSpace: 'nowrap' }}>{s.name}</td>
+                    <td style={{ fontSize: 11, padding: '10px 10px', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span className={`dot ${s.status === 'READY' ? 'dot-allow' : s.status === 'DEGRADED' ? 'dot-warn' : 'dot-block'} animate-pulse-glow`} style={{ width: 6, height: 6 }} />
+                        <span style={{ color: s.status === 'READY' ? '#059669' : s.status === 'DEGRADED' ? '#D97706' : '#DC2626', fontWeight: 600 }}>{s.status}</span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 11, color: '#64748B', fontFamily: 'var(--font-mono)', padding: '10px 10px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.endpoint || s.details}</td>
+                    <td style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '10px 10px', whiteSpace: 'nowrap' }}>{s.latency_ms} ms</td>
+                    <td style={{ fontSize: 11, color: '#64748B', padding: '10px 10px', whiteSpace: 'nowrap' }}>{s.last_checked || 'Active'}</td>
+                    <td style={{ padding: '10px 10px' }}>
+                      <button
+                        onClick={onRefreshHealth}
+                        disabled={isProcessing}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: '#EFF6FF',
+                          border: '1px solid #DBEAFE',
+                          color: '#2563EB',
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          cursor: isProcessing ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <ExternalLink size={10} />
+                        Test
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Card 2: Fault Tolerance Policy (H5) */}

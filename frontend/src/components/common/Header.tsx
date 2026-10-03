@@ -1,7 +1,8 @@
 import React from 'react';
 import {
   LayoutDashboard, MessageSquare, FlaskConical,
-  BarChart3, FileText, SlidersHorizontal, Activity, Sun, ChevronDown, RefreshCw, RotateCcw
+  BarChart3, FileText, SlidersHorizontal, Activity, Sun, ChevronDown, RefreshCw, RotateCcw, GitBranch,
+  Menu, X, ShieldCheck, Search
 } from 'lucide-react';
 import type { ActiveTab } from '../../types';
 
@@ -19,6 +20,7 @@ interface HeaderProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   auditCount?: number;
+  reviewCount?: number;
 }
 
 export function PrismLogo({ size = 28 }: { size?: number }) {
@@ -52,6 +54,7 @@ const NAV: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview',   label: 'Overview',        icon: <LayoutDashboard size={15} /> },
   { id: 'chat',       label: 'Protected Chat',  icon: <MessageSquare   size={15} /> },
   { id: 'attack-lab', label: 'Attack Lab',      icon: <FlaskConical    size={15} /> },
+  { id: 'domain-routing', label: 'Domain Routing', icon: <GitBranch size={15} /> },
   { id: 'dashboard',  label: 'Dashboard',       icon: <BarChart3       size={15} /> },
   { id: 'research',   label: 'Research',        icon: <FileText        size={15} /> },
   { id: 'audit',      label: 'Audit Trail',     icon: <SlidersHorizontal size={15} /> },
@@ -61,12 +64,21 @@ const NAV: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
 export const Header: React.FC<HeaderProps> = ({
   isLiveMode, setIsLiveMode, resetToDemoState,
   onRefreshData, onRefreshSession, isProcessing = false,
-  activeTab, setActiveTab, auditCount = 0,
+  mobileMenuOpen, setMobileMenuOpen, activeTab, setActiveTab, auditCount = 0, reviewCount = 0,
 }) => {
+  const groups = [
+    { label: 'Workspace', items: NAV.slice(0, 4) },
+    { label: 'Evidence', items: NAV.slice(4) },
+  ];
+  const navigate = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
   return (
+    <>
     <header className="topnav">
       {/* Brand */}
-      <div className="topnav-brand" onClick={() => setActiveTab('overview')} role="button" tabIndex={0}>
+      <div className="topnav-brand" onClick={() => navigate('overview')} role="button" tabIndex={0}>
         <div className="topnav-logo-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <PrismLogo size={28} />
         </div>
@@ -78,11 +90,11 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Nav links */}
       <nav className="topnav-nav" aria-label="Main navigation">
-        {NAV.map(item => (
+        {groups.flatMap(group => group.items).map(item => (
           <button
             key={item.id}
             className={`nav-link${activeTab === item.id ? ' active' : ''}`}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => navigate(item.id)}
             aria-current={activeTab === item.id ? 'page' : undefined}
           >
             {item.icon}
@@ -95,6 +107,15 @@ export const Header: React.FC<HeaderProps> = ({
                 fontFamily: 'var(--font-mono)',
               }}>
                 {auditCount}
+              </span>
+            )}
+            {item.id === 'domain-routing' && reviewCount > 0 && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, lineHeight: 1,
+                background: '#FFEDD5', color: '#C2410C', padding: '2px 5px', borderRadius: 4,
+                fontFamily: 'var(--font-mono)',
+              }}>
+                {reviewCount}
               </span>
             )}
           </button>
@@ -167,7 +188,29 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
           <ChevronDown size={14} color="#64748B" className="hide-sm" />
         </div>
+        <button className="mobile-nav-toggle" title="Open navigation" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
       </div>
     </header>
+    {mobileMenuOpen && (
+      <div className="mobile-nav-panel">
+        <div className="mobile-nav-heading"><span>Gateway navigation</span><span className="mobile-nav-status"><ShieldCheck size={13} /> Protected</span></div>
+        {groups.map(group => (
+          <div key={group.label} className="mobile-nav-group">
+            <div className="mobile-nav-group-label">{group.label}</div>
+            {group.items.map(item => (
+              <button key={item.id} className={`mobile-nav-link${activeTab === item.id ? ' active' : ''}`} onClick={() => navigate(item.id)}>
+                {item.icon}<span>{item.label}</span>
+                {item.id === 'audit' && auditCount > 0 && <b>{auditCount}</b>}
+                {item.id === 'domain-routing' && reviewCount > 0 && <b>{reviewCount}</b>}
+              </button>
+            ))}
+          </div>
+        ))}
+        <div className="mobile-nav-footer"><Search size={14} /><span>Use the navigation above to switch workspaces</span></div>
+      </div>
+    )}
+    </>
   );
 };

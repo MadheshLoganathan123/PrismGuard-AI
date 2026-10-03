@@ -2,9 +2,11 @@ import React from 'react';
 import {
   Shield, CheckCircle2, ArrowRight, RefreshCw, FileText,
   Clock, AlertTriangle, Users, Target, Lock, Brain, Database,
-  User, Search, Sliders, Check
+  Check
 } from 'lucide-react';
 import type { ActiveTab, AuditEvent, TestCase } from '../../types';
+import type { DomainRoutingEvent, ReviewItem, SimulatedModelUpdate } from '../../types/domainRouting';
+import { DOMAIN_DEMO_METRICS } from '../../data/domainRoutingMockData';
 import { PrismLogo } from '../common/Header';
 
 export interface OverviewViewProps {
@@ -14,6 +16,9 @@ export interface OverviewViewProps {
   quotaTotal?: number;
   onSelectAudit: (e: AuditEvent) => void;
   testCases?: TestCase[];
+  routingEvents?: DomainRoutingEvent[];
+  reviewQueue?: ReviewItem[];
+  modelUpdates?: SimulatedModelUpdate[];
 }
 
 export type Props = OverviewViewProps;
@@ -149,18 +154,7 @@ function Donut({ segs, total }: { segs: { pct: number; color: string }[]; total:
   );
 }
 
-const PIPELINE = [
-  { title: 'Client Request', sub: 'User input from application', icon: <User size={16} color="#64748B" />, bg: '#F1F5F9', border: '#E2E8F0' },
-  { title: 'Normalize', sub: 'Decode Canonicalize Clean', icon: <FileText size={16} color="#0284C7" />, bg: '#E0F2FE', border: '#BAE6FD' },
-  { title: 'Local Detector', sub: 'Pattern match Signal extraction', icon: <Search size={16} color="#7C3AED" />, bg: '#EDE9FE', border: '#DDD6FE' },
-  { title: 'SecureAI Guard', sub: '/v1/check/prompt External API', icon: <Shield size={16} color="#059669" />, bg: '#D1FAE5', border: '#A7F3D0' },
-  { title: 'Risk Engine', sub: 'Score & classify Risk bands', icon: <Sliders size={16} color="#D97706" />, bg: '#FEF3C7', border: '#FDE68A' },
-  { title: 'Risk (Enforce)', sub: '/v1/cbe-classify Redact secrets', icon: <Lock size={16} color="#EA580C" />, bg: '#FFEDD5', border: '#FED7AA' },
-  { title: 'LLM (Protected)', sub: 'GPT-4o-mini (if allowed)', icon: <Brain size={16} color="#2563EB" />, bg: '#DBEAFE', border: '#BFDBFE' },
-  { title: 'Output Guard', sub: '/v1/check/response Redact secrets', icon: <Shield size={16} color="#0284C7" />, bg: '#E0F2FE', border: '#BAE6FD' },
-  { title: 'Output Store', sub: 'SQLite Log event', icon: <Database size={16} color="#64748B" />, bg: '#F1F5F9', border: '#E2E8F0' },
-  { title: 'Audit Store', sub: 'SQLite Evidence record', icon: <Database size={16} color="#64748B" />, bg: '#F1F5F9', border: '#E2E8F0' },
-];
+
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
   setActiveTab,
@@ -169,6 +163,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   quotaTotal: _quotaTotal,
   onSelectAudit,
   testCases,
+  routingEvents = [],
+  reviewQueue = [],
+  modelUpdates = [],
 }) => {
   const total = auditEvents.length;
   const allowed = auditEvents.filter(e => e.policy_decision === 'ALLOW').length;
@@ -205,7 +202,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="simple-overview" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── Row 1: Hero Card + Gateway Status Card ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: 16, alignItems: 'stretch' }}>
@@ -314,6 +311,22 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 onClick={() => setActiveTab('attack-lab')}
               >
                 View Architecture
+              </button>
+              <button
+                className="btn"
+                style={{
+                  background: '#FFFFFF',
+                  color: '#4338CA',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  padding: '9px 16px',
+                  borderRadius: 8,
+                  border: '1px solid #C7D2FE',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setActiveTab('domain-routing')}
+              >
+                Open Domain Routing Lab
               </button>
             </div>
           </div>
@@ -594,80 +607,44 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
       </div>
 
-      {/* ── Row 3: Security Gateway Architecture + Latest Verified Finding ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: 16 }}>
-
-        {/* Architecture Pipeline */}
-        <div className="card" style={{ padding: '20px 24px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>Security Gateway Architecture</div>
-              <div style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>7-stage defense-in-depth pipeline for every request</div>
-            </div>
-            <button
-              className="btn-ghost"
-              style={{ color: '#2563EB', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              onClick={() => setActiveTab('attack-lab')}
-            >
-              View Technical Details →
-            </button>
+      {/* Domain routing cards */}
+      <div className="card" style={{ padding: 20, borderRadius: 14, border: '1px solid #E2E8F0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Domain Routing & Continuous Defense</div>
+            <div style={{ fontSize: 12, color: '#64748B' }}>Simulated telemetry · Keyword Filter → Secure AI → Router → Demo adapters</div>
           </div>
-
-          <div style={{ overflowX: 'auto', paddingBottom: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 760, justifyContent: 'space-between' }}>
-              {PIPELINE.map((s, i) => (
-                <React.Fragment key={i}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: 72 }}>
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 9,
-                        background: s.bg,
-                        border: `1px solid ${s.border}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {s.icon}
-                    </div>
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        color: '#0F172A',
-                        textAlign: 'center',
-                        lineHeight: 1.25,
-                      }}
-                    >
-                      {s.title}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        color: '#64748B',
-                        textAlign: 'center',
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      {s.sub}
-                    </span>
-                  </div>
-
-                  {i < PIPELINE.length - 1 && (
-                    <div style={{ paddingTop: 10, color: '#94A3B8' }}>
-                      <ArrowRight size={13} />
-                    </div>
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
+          <button className="btn-ghost" style={{ color: '#4F46E5', fontSize: 12, fontWeight: 600 }} onClick={() => setActiveTab('domain-routing')}>
+            Open Domain Routing Lab →
+          </button>
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }}>
+          {[
+            { id: 'BANKING', n: DOMAIN_DEMO_METRICS.banking, model: 'Banking ML Model — DEMO', res: 'Mock Banking Systems', bg: '#EEF2FF', fg: '#3730A3' },
+            { id: 'GOVERNMENT', n: DOMAIN_DEMO_METRICS.government, model: 'Government ML Model — DEMO', res: 'Mock Government Databases', bg: '#ECFEFF', fg: '#0E7490' },
+            { id: 'COMPANY', n: DOMAIN_DEMO_METRICS.company, model: 'Company ML Model — DEMO', res: 'Mock Company Databases', bg: '#FFF7ED', fg: '#C2410C' },
+            { id: 'OTHER', n: DOMAIN_DEMO_METRICS.other, model: 'Research ML Model — DEMO', res: 'Public/Research Resources', bg: '#F5F3FF', fg: '#6D28D9' },
+          ].map(d => (
+            <div key={d.id} style={{ padding: 12, borderRadius: 10, background: d.bg, border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: d.fg }}>{d.id}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#0F172A' }}>{d.n}</div>
+              <div style={{ fontSize: 10, color: '#64748B' }}>Avg confidence {DOMAIN_DEMO_METRICS.averageConfidence}%</div>
+              <div style={{ fontSize: 10, fontWeight: 600, marginTop: 6 }}>{d.model}</div>
+              <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#fff', color: d.fg, border: '1px solid #E2E8F0' }}>Synthetic boundary</span>
+              <div style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>{d.res}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: '#475569' }}>
+          <span>Held {DOMAIN_DEMO_METRICS.heldForReview} · Blocked {DOMAIN_DEMO_METRICS.blockedBeforeRouting} · Cross-domain {DOMAIN_DEMO_METRICS.crossDomainBlocked}</span>
+          <span>Pending reviews {reviewQueue.filter(r => r.status === 'PENDING').length || DOMAIN_DEMO_METRICS.pendingReviews}</span>
+          <span>Feedback: {modelUpdates.filter(u => u.status !== 'ACTIVE' && u.status !== 'ROLLED_BACK').length} simulated updates awaiting approval</span>
+          <span>{routingEvents.length} session routing events</span>
+        </div>
+      </div>
 
-        {/* Latest Verified Finding */}
-        <div className="card" style={{ padding: '20px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Latest Verified Finding */}
+      <div className="card" style={{ padding: '20px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Latest Verified Finding</span>
             <button
@@ -766,9 +743,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 2 }}>Live traffic through the gateway is evaluated in real time.</div>
             </div>
           )}
-        </div>
-      </div>
-
+        
       {/* ── Row 4: Recent Audit Events + Research Test Suite + System Performance ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px 280px', gap: 16 }}>
 
@@ -977,6 +952,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
+      </div>
       </div>
     </div>
   );

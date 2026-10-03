@@ -110,7 +110,7 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="compact-audit" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* ── Top Header ── */}
       <div

@@ -11,6 +11,7 @@ import { computeRiskScore } from '../../engine/riskEngine';
 import { evaluatePolicy } from '../../engine/policyEngine';
 import type { ChatApiResponse, ResearchTestResult } from '../../api/client';
 import { apiClient } from '../../api/client';
+import type { DomainRoutingEvent } from '../../types/domainRouting';
 
 interface Props {
   testCases: TestCase[];
@@ -21,6 +22,7 @@ interface Props {
   onSelectAudit: (event: AuditEvent) => void;
   testPromptOnBackend?: (text: string, presetId?: string) => Promise<ChatApiResponse>;
   isLiveMode?: boolean;
+  routingEvent?: DomainRoutingEvent | null;
 }
 
 function decisionBadge(d: string) {
@@ -44,6 +46,7 @@ function catColor(cat: string) {
     'benign': '#059669', 'Benign Coding': '#059669', 'Benign Education': '#059669',
     'output-leakage': '#7C3AED', 'Output Leakage': '#7C3AED',
     'reliability': '#6B7280', 'Reliability & Error': '#6B7280',
+    'Domain Routing': '#4F46E5', 'domain routing': '#4F46E5',
   };
   return m[cat] || m[cat?.toLowerCase()] || '#6B7280';
 }
@@ -57,6 +60,7 @@ function hypothesisLabel(tc: TestCase): string {
   if (cat.includes('split') || ac.includes('h4')) return 'H4';
   if (cat.includes('reliab') || cat.includes('error') || ac.includes('h5')) return 'H5';
   if (cat.includes('output') || cat.includes('leakage') || ac.includes('h6')) return 'H6';
+  if (cat.includes('domain') || ac.includes('h7') || (tc.test_id || '').startsWith('DOM-')) return 'H7';
   if (cat.includes('role')) return 'H2';
   if (cat.includes('direct') || cat.includes('override') || cat.includes('extract')) return 'H1';
   return '—';
@@ -70,6 +74,7 @@ const H_GROUPS: Record<string, string[]> = {
   'H4 — Payload Split': ['PI-014'],
   'H5 — Error Handling': ['ERR-001', 'ERR-002'],
   'H6 — Output Leakage': ['OUT-001', 'OUT-003'],
+  'H7 — Domain Routing': ['DOM-001','DOM-002','DOM-003','DOM-004','DOM-005','DOM-006','DOM-007','DOM-008','DOM-009','DOM-010'],
   'Direct / Extract': ['PI-001', 'PI-003'],
   'Benign (FP)': ['FP-001', 'FP-002', 'FP-003', 'FP-004'],
 };
@@ -88,8 +93,9 @@ const STAGE_DEFS = [
 
 export const AttackLabView: React.FC<Props> = ({
   testCases, activePreset, setActivePreset, setActiveTab,
-  onSendToChat, onSelectAudit: _onSelectAudit, testPromptOnBackend,
+  onSendToChat, onSelectAudit: _onSelectAudit, testPromptOnBackend, routingEvent: _routingEvent,
 }) => {
+
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState('All');
   const [payload, setPayload] = useState(activePreset.raw_input || '');
@@ -97,7 +103,7 @@ export const AttackLabView: React.FC<Props> = ({
   const [researchResult, setResearchResult] = useState<ResearchTestResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  const [resultTab, setResultTab] = useState<'comparison' | 'stage' | 'risk' | 'raw'>('comparison');
+  const [resultTab, setResultTab] = useState<'comparison' | 'stage' | 'risk' | 'raw' | 'domain' | 'boundary' | 'review'>('comparison');
   const [copied, setCopied] = useState(false);
   const [runMode, setRunMode] = useState<'chat' | 'research'>('chat');
 
@@ -188,7 +194,7 @@ export const AttackLabView: React.FC<Props> = ({
   const displayDesc = activePreset.purpose || activePreset.description || '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="simple-attack-lab" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── Page header ── */}
       <div className="page-header">
@@ -203,7 +209,7 @@ export const AttackLabView: React.FC<Props> = ({
         </div>
         <div className="page-header-right">
           {[
-            { val: String(cases.length || 15), label: 'Test Cases', sub: 'Across 6 hypotheses', bg: '#EEF2FF', clr: '#6366F1' },
+            { val: String(cases.length || 25), label: 'Test Cases', sub: 'Across 7 hypotheses', bg: '#EEF2FF', clr: '#6366F1' },
             { val: 'Live', label: 'Gateway', sub: 'Guard + LLM + Audit', bg: '#D1FAE5', clr: '#059669' },
           ].map(s => (
             <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: s.bg, border: '1px solid var(--border-light)', borderRadius: 8 }}>
@@ -450,8 +456,8 @@ export const AttackLabView: React.FC<Props> = ({
             </div>
           )}
 
-          {/* ── Side-by-side results ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 210px', gap: 14 }}>
+          {/* ── Side-by-side results + full-width tab panel ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 210px', gap: 14, alignItems: 'start' }}>
 
             {/* Guard result */}
             <div className="card card-p" style={{ borderTop: `3px solid ${(liveGuardAllowed === false || (!liveGuardAllowed && liveGuardAllowed !== null)) ? '#DC2626' : '#059669'}` }}>
@@ -596,52 +602,18 @@ export const AttackLabView: React.FC<Props> = ({
               )}
             </div>
 
-            {/* Pipeline execution */}
-            <div className="card card-p">
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12 }}>Pipeline Execution</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {STAGE_DEFS.map((stage, i) => {
-                  const ms = liveStages
-                    ? (liveStages as any)[stage.key] ?? 0
-                    : i < 5 ? [11, 14, activePreset.guard_latency_ms || 165, 8, 3][i] : (policy.allowLlmExecution ? [360, 135, 5][i - 5] : 0);
-                  const ran = ms > 0;
-                  const skipped = stage.skippedOnBlock && !policy.allowLlmExecution && !chatResult;
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: ran ? `${stage.color}20` : '#F3F4F6', border: `1.5px solid ${ran ? stage.color : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <span style={{ fontSize: 7, fontWeight: 700, color: ran ? stage.color : '#9CA3AF' }}>{stage.num}</span>
-                      </div>
-                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', flex: 1 }}>{stage.name}</span>
-                      <span className={`badge ${ran ? 'badge-allow' : skipped ? 'badge-gray' : 'badge-gray'}`} style={{ fontSize: 7, padding: '1px 4px' }}>
-                        {ran ? 'Done' : skipped ? 'Skip' : '—'}
-                      </span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', width: 36, textAlign: 'right' }}>
-                        {ran ? `${Math.round(ms)}ms` : '—'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              {liveStages && (
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Total</span>
-                  <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                    {Math.round(Object.values(liveStages).reduce((a, v) => a + (v || 0), 0))}ms
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Tabs: Comparison / Stage / Risk / Raw ── */}
-          <div className="card" style={{ overflow: 'hidden' }}>
+          {/* ── Tabs: Comparison / Stage / Risk / Raw — spans all 3 columns ── */}
+          <div className="card" style={{ overflow: 'hidden', gridColumn: '1 / -1' }}>
             <div style={{ borderBottom: '1px solid var(--border-light)', padding: '0 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex' }}>
                 {([
-                  { id: 'comparison', label: 'Result Comparison', icon: <GitCompare size={12} /> },
+                  { id: 'comparison', label: 'Security Comparison', icon: <GitCompare size={12} /> },
+                  { id: 'domain',     label: 'Domain Routing',     icon: <Shield size={12} /> },
+                  { id: 'boundary',   label: 'Data Boundary',      icon: <Info size={12} /> },
                   { id: 'stage',      label: 'Stage Details',     icon: <Zap size={12} /> },
-                  { id: 'risk',       label: 'Risk Analysis',     icon: <BarChart2 size={12} /> },
-                  { id: 'raw',        label: 'Raw Response',      icon: <FileCode2 size={12} /> },
+                  { id: 'risk',       label: 'Risk Breakdown',     icon: <BarChart2 size={12} /> },
+                  { id: 'review',     label: 'Admin Review Impact', icon: <AlertTriangle size={12} /> },
+                  { id: 'raw',        label: 'Raw Evidence',      icon: <FileCode2 size={12} /> },
                 ] as const).map(t => (
                   <button key={t.id} className={`tab-btn${resultTab === t.id ? ' active' : ''}`} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setResultTab(t.id)}>
                     {t.icon}{t.label}
@@ -866,8 +838,9 @@ export const AttackLabView: React.FC<Props> = ({
             </div>
           </div>
 
-        </div>
-      </div>
+          </div>{/* end 3-col results grid */}
+        </div>{/* end right column flex */}
+      </div>{/* end main split grid */}
     </div>
   );
 };

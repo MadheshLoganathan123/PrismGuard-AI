@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Database, Download, Play, Search, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Database, Download, Play, Search, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, GitBranch } from 'lucide-react';
 import type { TestCase } from '../../types';
+import type { DomainRoutingEvent } from '../../types/domainRouting';
 
 interface Props {
   testCases: TestCase[];
@@ -8,7 +9,10 @@ interface Props {
   quotaTotal: number;
   onRunBatch: (ids: string[]) => Promise<void>;
   isProcessing: boolean;
+  routingEvents?: DomainRoutingEvent[];
+  onRunDomainSuite?: () => Promise<void>;
 }
+
 
 function decisionBadge(d: string) {
   if (d === 'ALLOW') return 'badge-allow';
@@ -30,7 +34,8 @@ function catColor(cat: string) {
   return m[cat] || '#6B7280';
 }
 
-export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed, quotaTotal: _quotaTotal, onRunBatch, isProcessing }) => {
+export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed, quotaTotal: _quotaTotal, onRunBatch, isProcessing, routingEvents = [], onRunDomainSuite }) => {
+
   const [activeTab, setActiveTab] = useState<'matrix' | 'hypotheses'>('matrix');
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All Categories');
@@ -57,12 +62,14 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
     { id: 'H4', title: 'H4 — Split Payload Gap', status: 'MITIGATED', statusClr: '#D97706', desc: 'Cross-message recombined prompts evaluated at the gateway prior to LLM submission.', cases: ['PI-014'] },
     { id: 'H5', title: 'H5 — Partial / Error Ambiguity Fail-Safe', status: 'HARDENED', statusClr: '#059669', desc: 'Gateway refuses fail-open behavior. HTTP 502/503 or status=partial gracefully routed to fast-track safety review.', cases: ['ERR-001','ERR-002'] },
     { id: 'H6', title: 'H6 — Output-Only Secret Leakage Gap', status: 'ACTIVE REDACTION', statusClr: '#7C3AED', desc: 'Model outputs analyzed through dual screening: POST /v1/check/response and regex secret interceptors mask API keys before client delivery.', cases: ['OUT-001','OUT-003'] },
+    { id: 'H7', title: 'H7 — Domain Routing & Data-Boundary Enforcement', status: 'ACTIVE', statusClr: '#4F46E5', desc: 'Domain router classifies prompts into Banking, Government, Company, or Other and enforces data-boundary constraints. Cross-domain access attempts are blocked or held for review. Blocked/reviewed prompts never reach any domain model or resource adapter.', cases: ['DOM-001','DOM-002','DOM-003','DOM-004','DOM-005','DOM-006','DOM-007','DOM-008','DOM-009','DOM-010'] },
   ];
+
 
   const sc = selectedCase as any;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="compact-research" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
       {/* ── Page header ── */}
       <div className="page-header">
@@ -198,7 +205,7 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
 
           {/* Detail panel */}
           {sc?.test_id && (
-            <div className="card" style={{ overflow: 'hidden', position: 'sticky', top: 80 }}>
+            <div className="card" style={{ overflow: 'hidden' }}>
               {/* Header */}
               <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-light)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
@@ -349,8 +356,9 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
           )}
         </div>
       ) : (
-        /* ── Hypotheses grid ── */
+        <>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
+
           {HYPS.map(h => (
             <div key={h.id} className="card card-p">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -364,6 +372,61 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
             </div>
           ))}
         </div>
+
+        {/* Domain Routing Research Matrix */}
+        <div className="card" style={{ overflow: 'hidden', marginTop: 4 }}>
+          <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-light)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <GitBranch size={16} color="#4F46E5" />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>H7 — Domain Routing Research Matrix</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Local sample data — SIMULATED DEMO — no real domain system accessed</div>
+              </div>
+            </div>
+            <button className="btn btn-primary-gradient" style={{ fontSize: 12 }} onClick={onRunDomainSuite} disabled={isProcessing || !onRunDomainSuite}>
+              <Play size={12} /> Run Domain Routing Suite
+            </button>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Test ID</th><th>Input Domain</th><th>Expected</th><th>Selected</th>
+                  <th>Confidence</th><th>Guard</th><th>PrismGuard</th><th>Resource Boundary</th>
+                  <th>Cross-Domain</th><th>Review</th><th>Mode</th><th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {testCases.filter(tc => tc.test_id.startsWith('DOM-')).map(tc => {
+                  const rid = routingEvents.find(e => e.scenarioId?.includes(tc.test_id) || e.redactedPromptPreview.includes(tc.raw_input?.slice(0,20) || ''));
+                  const domain = rid?.routing?.selectedDomain || (tc.prism_action === 'ALLOW' ? 'BANKING' : undefined);
+                  const conf = rid?.routing?.confidence ? `${rid.routing.confidence}%` : tc.prism_score > 70 ? 'HIGH' : tc.prism_score > 30 ? 'MEDIUM' : 'LOW';
+                  const boundary = rid?.adapter?.resourceName || (tc.prism_action === 'BLOCK' ? 'NOT EXECUTED' : 'Mock Resource (demo)');
+                  const crossDomain = rid?.routing?.policy?.crossDomainViolation ?? tc.prism_signals?.includes('cross_domain');
+                  return (
+                    <tr key={tc.test_id}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--brand-primary)', fontWeight: 600 }}>{tc.test_id}</td>
+                      <td style={{ fontSize: 11 }}>{tc.category}</td>
+                      <td><span className={`badge ${tc.expected_label === 'benign' ? 'badge-allow' : 'badge-block'}`} style={{ fontSize: 9 }}>{tc.expected_label === 'benign' ? 'ALLOW' : 'REVIEW/BLOCK'}</span></td>
+                      <td style={{ fontSize: 11, fontWeight: 700, color: '#4F46E5' }}>{domain || '—'}</td>
+                      <td style={{ fontSize: 11 }}>{conf}</td>
+                      <td><span className={`badge ${tc.guard_allowed ? 'badge-allow' : 'badge-block'}`} style={{ fontSize: 9 }}>{tc.guard_allowed ? 'ALLOWED' : 'BLOCKED'}</span></td>
+                      <td><span className={`badge ${tc.prism_action === 'ALLOW' ? 'badge-allow' : tc.prism_action === 'BLOCK' ? 'badge-block' : 'badge-review'}`} style={{ fontSize: 9 }}>{tc.prism_action}</span></td>
+                      <td style={{ fontSize: 10, color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{boundary}</td>
+                      <td style={{ textAlign: 'center' }}><span style={{ fontSize: 10, fontWeight: 700, color: crossDomain ? '#DC2626' : '#059669' }}>{crossDomain ? 'YES' : 'No'}</span></td>
+                      <td style={{ fontSize: 10 }}>{rid?.reviewRequired ? <span style={{ color: '#EA580C', fontWeight: 700 }}>REVIEW</span> : (tc.prism_action === 'REVIEW' ? <span style={{ color: '#EA580C', fontWeight: 700 }}>REVIEW</span> : <span style={{ color: '#059669' }}>None</span>)}</td>
+                      <td><span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: 3, background: '#EEF2FF', color: '#4338CA' }}>{rid?.executionMode || 'SIMULATED'}</span></td>
+                      <td style={{ fontSize: 10, fontWeight: 700, color: tc.prism_action === 'BLOCK' ? '#DC2626' : tc.prism_action === 'REVIEW' ? '#EA580C' : '#059669', whiteSpace: 'nowrap' }}>
+                        {tc.prism_action === 'BLOCK' ? 'BLOCKED BEFORE ROUTING' : tc.prism_action === 'REVIEW' ? 'HELD FOR REVIEW' : domain ? `ROUTED TO ${domain}` : 'ROUTED'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
       )}
     </div>
   );
