@@ -54,15 +54,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Explicit CORS configuration — no wildcard origins, no credentials leak
-# Allowed origins are loaded from CORS_ORIGINS env var; Regex covers all localhost ports
-_ALLOWED_METHODS = ["GET", "POST", "OPTIONS"]
-_ALLOWED_HEADERS = ["Content-Type", "Authorization", "X-API-Key"]
+# Explicit CORS configuration — supports configured origins, localhost, and Vercel domains
+_ALLOWED_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
+_ALLOWED_HEADERS = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,  # Never falls back to ["*"]; set CORS_ORIGINS in .env
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
+    allow_origins=settings.cors_origins,
+    allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:[0-9]+)?|https://.*\.vercel\.app)$",
     allow_credentials=True,
     allow_methods=_ALLOWED_METHODS,
     allow_headers=_ALLOWED_HEADERS,

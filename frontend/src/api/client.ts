@@ -1,6 +1,7 @@
 import type { AuditEvent, TestCase, DecisionType, RiskBand, ExecutionMode } from '../types';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
+const RAW_API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, '');
 const DEFAULT_API_KEY = (import.meta as any).env?.VITE_PRISMGUARD_API_KEY || 'pg-admin-key-2026';
 
 export interface ChatApiResponse {

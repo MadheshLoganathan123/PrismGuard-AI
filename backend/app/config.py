@@ -51,7 +51,10 @@ class Settings:
         self.debug: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 
         # CORS
-        cors_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
+        cors_raw = os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,https://prism-guard-ai.vercel.app,https://prismguard-ai.vercel.app"
+        )
         self.cors_origins: List[str] = [origin.strip() for origin in cors_raw.split(",") if origin.strip()]
 
         # Storage & Telemetry paths
