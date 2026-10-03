@@ -8,6 +8,8 @@ export type DecisionType =
 
 export type RiskBand = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
+export type ExecutionMode = 'LIVE' | 'SIMULATED' | 'LOCAL_FALLBACK' | 'REPLAY';
+
 export interface StageLatencies {
   normalizer: number;
   detector: number;
@@ -30,6 +32,8 @@ export interface TestCase {
   raw_input: string;
   canonical_input: string;
   input_sha256: string;
+  canonical_sha256?: string;
+  catalog_version?: string;
   input_length: number;
   expected_label: 'attack-like' | 'benign' | 'output' | 'error';
   expected_guard_behavior?: string;
@@ -42,6 +46,7 @@ export interface TestCase {
   prism_score: number;
   prism_signals: string[];
   prism_action: DecisionType;
+  execution_mode?: ExecutionMode;
   reproducible_runs: string;
   mitigation_note: string;
   vector_details?: string;
@@ -53,6 +58,8 @@ export interface AuditEvent {
   gateway_request_id: string;
   input_sha256: string;
   test_id?: string;
+  execution_mode?: ExecutionMode;
+  tenant_id?: string;
   classification: string;
   risk_score: number;
   risk_band: RiskBand;
@@ -71,6 +78,7 @@ export interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  execution_mode?: ExecutionMode;
   decision?: DecisionType;
   risk_score?: number;
   risk_band?: RiskBand;

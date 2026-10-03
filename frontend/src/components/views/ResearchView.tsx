@@ -135,7 +135,7 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
             <div style={{ overflowX: 'auto' }}>
               <table className="tbl">
                 <thead>
-                  <tr><th>ID</th><th>Category</th><th>Test Name & Description</th><th>Expected Label</th><th>SecureAI Guard</th><th>PrismGuard AI</th><th>Runs</th><th>Actions</th></tr>
+                  <tr><th>ID</th><th>Category</th><th>Test Name & Description</th><th>Expected Label</th><th>SecureAI Guard</th><th>PrismGuard AI</th><th>Mode</th><th>Runs</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {filtered.map(tc => {
@@ -166,6 +166,22 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
                           </span>
                         </td>
                         <td><span className={`badge ${decisionBadge(tc.prism_action)}`} style={{ fontSize: 9 }}>{tc.prism_action}</span></td>
+                        <td>
+                          <span
+                            style={{
+                              fontSize: 9.5,
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontFamily: 'var(--font-mono)',
+                              background: tc.execution_mode === 'LIVE' ? '#ECFDF5' : tc.execution_mode === 'LOCAL_FALLBACK' ? '#FEF3C7' : '#EDE9FE',
+                              color: tc.execution_mode === 'LIVE' ? '#059669' : tc.execution_mode === 'LOCAL_FALLBACK' ? '#D97706' : '#7C3AED',
+                              border: `1px solid ${tc.execution_mode === 'LIVE' ? '#A7F3D0' : tc.execution_mode === 'LOCAL_FALLBACK' ? '#FDE68A' : '#DDD6FE'}`,
+                            }}
+                          >
+                            {tc.execution_mode || 'SIMULATED'}
+                          </span>
+                        </td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{tc.reproducible_runs || '3'}</td>
                         <td>
                           <button className="btn-ghost" style={{ fontSize: 11, color: 'var(--brand-primary)' }} onClick={e => { e.stopPropagation(); setSelectedCase(tc); }}>
@@ -238,6 +254,18 @@ export const ResearchView: React.FC<Props> = ({ testCases, quotaUsed: _quotaUsed
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>Hypothesis</div>
                         <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>
                           {sc.category?.includes('Obfusc') ? 'H1 — Obfuscation Gap' : sc.category?.includes('Delimit') ? 'H2 — Smuggling' : 'H3 — Other'}
+                        </span>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>Catalog Version &amp; Hash</div>
+                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#059669', fontWeight: 600 }}>
+                          {sc.catalog_version || 'v1.1.0'} ✓ {sc.input_sha256?.substring(0, 10)}...
+                        </span>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>Execution Mode</div>
+                        <span className="badge badge-info" style={{ fontSize: 9 }}>
+                          {sc.execution_mode || 'SIMULATED'}
                         </span>
                       </div>
                     </div>

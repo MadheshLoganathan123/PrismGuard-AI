@@ -141,6 +141,8 @@ export function useAppStore() {
     syncWithBackend();
   }, [syncWithBackend]);
 
+  const [fallbackActive, setFallbackActive] = useState<boolean>(false);
+
   // Send message through security pipeline
   const sendChatMessage = async (text: string, presetId?: string) => {
     if (!text.trim() || isProcessing) return;
@@ -159,16 +161,22 @@ export function useAppStore() {
       if (isLiveMode) {
         try {
           const resp = await apiClient.sendChat(text, undefined, presetId);
+          const liveMode = resp.audit_event.execution_mode || 'LIVE';
+          resp.audit_event.execution_mode = liveMode;
+          setFallbackActive(false);
+
           const botMsg: ChatMessage = {
             id: 'msg-b-' + Date.now(),
             sender: 'assistant',
             text: resp.assistant_text || 'No response generated.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            execution_mode: liveMode,
             decision: resp.decision,
             risk_score: resp.risk_score,
             risk_band: resp.risk_band,
             telemetry: resp.audit_event
           };
+          userMsg.execution_mode = liveMode;
           userMsg.decision = resp.decision;
           userMsg.risk_score = resp.risk_score;
           userMsg.risk_band = resp.risk_band;
@@ -179,12 +187,25 @@ export function useAppStore() {
           setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
           return;
         } catch (e: any) {
-          console.warn('Live gateway call failed, using client-side fallback:', e);
+          console.warn('Live gateway call failed, executing with explicit LOCAL_FALLBACK:', e);
+          setFallbackActive(true);
+          const { message: botMsg, auditEvent } = await runSecurityPipeline(text, presetId, 'LOCAL_FALLBACK');
+          userMsg.execution_mode = 'LOCAL_FALLBACK';
+          userMsg.decision = auditEvent.policy_decision;
+          userMsg.risk_score = auditEvent.risk_score;
+          userMsg.risk_band = auditEvent.risk_band;
+          userMsg.telemetry = auditEvent;
+
+          setChatMessages(prev => [...prev.slice(0, -1), userMsg, botMsg]);
+          setAuditEvents(prev => [auditEvent, ...prev]);
+          setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
+          return;
         }
       }
 
-      // Offline / fallback simulator
-      const { message: botMsg, auditEvent } = await runSecurityPipeline(text, presetId);
+      // Offline / explicit simulator mode
+      const { message: botMsg, auditEvent } = await runSecurityPipeline(text, presetId, 'SIMULATED');
+      userMsg.execution_mode = 'SIMULATED';
       userMsg.decision = auditEvent.policy_decision;
       userMsg.risk_score = auditEvent.risk_score;
       userMsg.risk_band = auditEvent.risk_band;
@@ -203,9 +224,37 @@ export function useAppStore() {
     setIsProcessing(true);
     try {
       const resp = await apiClient.sendChat(text, undefined, presetId);
+      if (!resp.audit_event.execution_mode) {
+        resp.audit_event.execution_mode = isLiveMode ? 'LIVE' : 'SIMULATED';
+      }
+      setFallbackActive(false);
       setAuditEvents(prev => [resp.audit_event, ...prev]);
       setQuotaUsed(prev => Math.min(quotaTotal, prev + 1));
       return resp;
+    } catch (e) {
+      console.warn('Backend prompt check failed, executing local fallback:', e);
+      setFallbackActive(true);
+      const { message, auditEvent } = await runSecurityPipeline(text, presetId, 'LOCAL_FALLBACK');
+      setAuditEvents(prev => [auditEvent, ...prev]);
+      return {
+        request_id: auditEvent.gateway_request_id,
+        decision: auditEvent.policy_decision,
+        risk_score: auditEvent.risk_score,
+        risk_band: auditEvent.risk_band,
+        assistant_text: message.text,
+        security: {
+          local_signals: auditEvent.local_signals,
+          guard: {
+            status: auditEvent.guard_decision === 'PARTIAL' ? 'partial' : 'complete',
+            allowed: auditEvent.guard_decision === 'ALLOWED',
+            flags: [],
+            checks: {},
+            latency_ms: auditEvent.stage_latencies.guard_prompt
+          }
+        },
+        stage_latencies: auditEvent.stage_latencies,
+        audit_event: auditEvent
+      };
     } finally {
       setIsProcessing(false);
     }
@@ -223,9 +272,22 @@ export function useAppStore() {
             setAuditEvents(evts);
           }
           setQuotaUsed(batchRes.total_quota_consumed);
+          setFallbackActive(false);
           return;
         } catch (e) {
-          console.warn('Live research run failed, using local execution:', e);
+          console.warn('Live research run failed, executing with explicit LOCAL_FALLBACK:', e);
+          setFallbackActive(true);
+          const newEvents: AuditEvent[] = [];
+          for (const tid of testIds) {
+            const tc = testCasesList.find(t => t.test_id === tid);
+            if (tc) {
+              const { auditEvent } = await runSecurityPipeline(tc.raw_input, tc.test_id, 'LOCAL_FALLBACK');
+              newEvents.push(auditEvent);
+            }
+          }
+          setAuditEvents(prev => [...newEvents, ...prev]);
+          setQuotaUsed(prev => Math.min(quotaTotal, prev + testIds.length));
+          return;
         }
       }
 
@@ -233,7 +295,7 @@ export function useAppStore() {
       for (const tid of testIds) {
         const tc = testCasesList.find(t => t.test_id === tid);
         if (tc) {
-          const { auditEvent } = await runSecurityPipeline(tc.raw_input, tc.test_id);
+          const { auditEvent } = await runSecurityPipeline(tc.raw_input, tc.test_id, 'SIMULATED');
           newEvents.push(auditEvent);
         }
       }
@@ -306,6 +368,7 @@ export function useAppStore() {
     isLiveMode,
     setIsLiveMode,
     backendConnected,
+    fallbackActive,
     quotaUsed,
     quotaTotal,
     chatMessages,

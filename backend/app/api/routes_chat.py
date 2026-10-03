@@ -1,7 +1,7 @@
 import time
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.models.schemas import (
     ChatRequest,
@@ -20,15 +20,21 @@ from app.security.output import analyze_model_output
 from app.guard.client import guard_client
 from app.llm.client import llm_client
 from app.audit.logger import audit_logger, compute_sha256
+from app.security.auth import AuthenticatedUser, require_viewer
 
 router = APIRouter(prefix="/api", tags=["Chat"])
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def handle_chat(request: ChatRequest, req: Request):
+async def handle_chat(
+    request: ChatRequest,
+    req: Request,
+    user: AuthenticatedUser = Depends(require_viewer)
+):
     """
     Main gateway entrypoint for single-turn or short-context chat requests.
     Orchestrates defense-in-depth security verification before and after LLM inference.
+    Requires: any authenticated user (VIEWER+).
     """
     total_start = time.perf_counter()
     request_id = f"pg-{uuid.uuid4().hex[:12]}"
@@ -129,6 +135,9 @@ async def handle_chat(request: ChatRequest, req: Request):
     if guard_res.status.value == "partial":
         guard_decision_str = "PARTIAL"
 
+    # Determine execution mode — explicit, never ambiguous
+    execution_mode = "LIVE" if guard_client.is_live else "SIMULATED"
+
     audit_payload = {
         "id": event_id,
         "timestamp": iso_timestamp,
@@ -136,6 +145,8 @@ async def handle_chat(request: ChatRequest, req: Request):
         "test_id": request.preset_test_id,
         "input_sha256": input_sha256,
         "input_length": len(raw_text),
+        "execution_mode": execution_mode,
+        "tenant_id": user.tenant_id,
         "classification": "attack-like" if is_attack_like else ("benign" if is_benign_edu else "unknown"),
         "risk_score": risk_score,
         "risk_band": risk_band.value,
@@ -153,7 +164,8 @@ async def handle_chat(request: ChatRequest, req: Request):
         "action_taken": action_taken,
         "local_signals": list(set(local_signals)),
         "policy_rationale": rationale,
-        "request_summary": raw_text[:80] + ("..." if len(raw_text) > 80 else "")
+        # Privacy: never store raw prompt text; only the SHA-256 hash
+        "request_summary": f"[REDACTED — sha256:{input_sha256[:16]}...]"
     }
 
     audit_logger.record_event(audit_payload)
@@ -165,6 +177,7 @@ async def handle_chat(request: ChatRequest, req: Request):
         test_id=request.preset_test_id,
         input_sha256=input_sha256,
         input_length=len(raw_text),
+        execution_mode=execution_mode,
         classification=audit_payload["classification"],
         risk_score=risk_score,
         risk_band=risk_band,

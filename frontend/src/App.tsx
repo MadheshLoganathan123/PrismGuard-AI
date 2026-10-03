@@ -30,6 +30,44 @@ export function App() {
         auditCount={s.auditEvents.length}
       />
 
+      {s.fallbackActive && (
+        <div
+          style={{
+            background: '#FEF3C7',
+            borderBottom: '1px solid #FCD34D',
+            padding: '10px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 12.5,
+            color: '#92400E',
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            <span>
+              <strong>Local Fallback Active:</strong> Live backend gateway was unreachable. Current results are tagged with explicit <code>LOCAL_FALLBACK</code> simulation telemetry.
+            </span>
+          </div>
+          <button
+            onClick={() => s.refreshData()}
+            style={{
+              padding: '4px 10px',
+              fontSize: 11.5,
+              fontWeight: 700,
+              background: '#FFFFFF',
+              border: '1px solid #FCD34D',
+              borderRadius: 6,
+              color: '#B45309',
+              cursor: 'pointer',
+            }}
+          >
+            Retry Live Connection
+          </button>
+        </div>
+      )}
+
       <main className="page-content" style={{ flex: 1 }}>
         {s.activeTab === 'overview'   && <OverviewView  setActiveTab={s.setActiveTab} auditEvents={s.auditEvents} quotaUsed={s.quotaUsed} quotaTotal={s.quotaTotal} onSelectAudit={s.setSelectedAuditDrawerEvent} testCases={s.testCases} />}
         {s.activeTab === 'chat'       && <ChatView      chatMessages={s.chatMessages} isProcessing={s.isProcessing} onSendMessage={s.sendChatMessage} onSelectAudit={s.setSelectedAuditDrawerEvent} testCases={s.testCases} />}

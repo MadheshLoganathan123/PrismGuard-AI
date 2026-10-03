@@ -1,7 +1,8 @@
 from typing import Optional, List
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 
 from app.database import query_audit_events, get_audit_summary_stats
+from app.security.auth import AuthenticatedUser, require_viewer, require_admin
 
 router = APIRouter(prefix="/api/audit", tags=["Audit"])
 
@@ -11,17 +12,31 @@ async def list_audit_events(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     decision: Optional[str] = Query(default=None),
-    risk_band: Optional[str] = Query(default=None)
+    risk_band: Optional[str] = Query(default=None),
+    user: AuthenticatedUser = Depends(require_viewer)
 ):
     """
-    Returns paginated audit trail events with privacy-preserving hashes and zero secrets.
+    Returns paginated audit trail events scoped to the caller's tenant.
+    Responses contain only privacy-preserving hashes — never raw prompts.
+    Requires: VIEWER, RESEARCHER, or ADMIN role.
     """
-    return query_audit_events(limit=limit, offset=offset, decision=decision, risk_band=risk_band)
+    events = query_audit_events(
+        limit=limit,
+        offset=offset,
+        decision=decision,
+        risk_band=risk_band,
+        tenant_id=user.tenant_id
+    )
+    # Strip request_summary from all returned events to prevent prompt exposure
+    for evt in events:
+        evt.pop("request_summary", None)
+    return events
 
 
 @router.get("/stats")
-async def get_audit_statistics():
+async def get_audit_statistics(user: AuthenticatedUser = Depends(require_viewer)):
     """
     Returns aggregate summary statistics measured from the audit log database.
+    Requires: VIEWER, RESEARCHER, or ADMIN role.
     """
-    return get_audit_summary_stats()
+    return get_audit_summary_stats(tenant_id=user.tenant_id)

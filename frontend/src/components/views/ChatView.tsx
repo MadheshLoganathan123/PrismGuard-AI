@@ -437,6 +437,33 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         {isUser ? 'You' : 'Assistant'}
                       </span>
                       <span style={{ fontSize: 11, color: '#94A3B8' }}>{msg.timestamp}</span>
+                      {msg.execution_mode && (
+                        <span
+                          style={{
+                            fontSize: 9.5,
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            fontFamily: 'var(--font-mono)',
+                            letterSpacing: '0.04em',
+                            background:
+                              msg.execution_mode === 'LIVE' ? '#DCFCE7' :
+                              msg.execution_mode === 'LOCAL_FALLBACK' ? '#FEF3C7' :
+                              msg.execution_mode === 'REPLAY' ? '#F1F5F9' : '#EDE9FE',
+                            color:
+                              msg.execution_mode === 'LIVE' ? '#15803D' :
+                              msg.execution_mode === 'LOCAL_FALLBACK' ? '#B45309' :
+                              msg.execution_mode === 'REPLAY' ? '#475569' : '#6D28D9',
+                            border: `1px solid ${
+                              msg.execution_mode === 'LIVE' ? '#86EFAC' :
+                              msg.execution_mode === 'LOCAL_FALLBACK' ? '#FCD34D' :
+                              msg.execution_mode === 'REPLAY' ? '#CBD5E1' : '#DDD6FE'
+                            }`
+                          }}
+                        >
+                          {msg.execution_mode === 'LOCAL_FALLBACK' ? '⚠️ LOCAL_FALLBACK' : msg.execution_mode}
+                        </span>
+                      )}
                     </div>
 
                     {/* Message Bubble */}
@@ -554,9 +581,37 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
-                    <Shield size={15} color="#059669" />
-                    Security Trace
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#0F172A' }}>
+                      <Shield size={15} color="#059669" />
+                      Security Trace
+                    </div>
+                    {activeTelemetry.execution_mode && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          fontFamily: 'var(--font-mono)',
+                          background:
+                            activeTelemetry.execution_mode === 'LIVE' ? '#DCFCE7' :
+                            activeTelemetry.execution_mode === 'LOCAL_FALLBACK' ? '#FEF3C7' :
+                            activeTelemetry.execution_mode === 'REPLAY' ? '#F1F5F9' : '#EDE9FE',
+                          color:
+                            activeTelemetry.execution_mode === 'LIVE' ? '#15803D' :
+                            activeTelemetry.execution_mode === 'LOCAL_FALLBACK' ? '#B45309' :
+                            activeTelemetry.execution_mode === 'REPLAY' ? '#475569' : '#6D28D9',
+                          border: `1px solid ${
+                            activeTelemetry.execution_mode === 'LIVE' ? '#86EFAC' :
+                            activeTelemetry.execution_mode === 'LOCAL_FALLBACK' ? '#FCD34D' :
+                            activeTelemetry.execution_mode === 'REPLAY' ? '#CBD5E1' : '#DDD6FE'
+                          }`
+                        }}
+                      >
+                        {activeTelemetry.execution_mode === 'LOCAL_FALLBACK' ? '⚠️ LOCAL_FALLBACK' : activeTelemetry.execution_mode}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => onSelectAudit(activeTelemetry)}

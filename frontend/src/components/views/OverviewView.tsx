@@ -7,7 +7,7 @@ import {
 import type { ActiveTab, AuditEvent, TestCase } from '../../types';
 import { PrismLogo } from '../common/Header';
 
-interface Props {
+export interface OverviewViewProps {
   setActiveTab: (t: ActiveTab) => void;
   auditEvents: AuditEvent[];
   quotaUsed?: number;
@@ -15,6 +15,8 @@ interface Props {
   onSelectAudit: (e: AuditEvent) => void;
   testCases?: TestCase[];
 }
+
+export type Props = OverviewViewProps;
 
 /* ── Tiny SVG sparkline ── */
 function Spark({ data, color, w = 72, h = 24 }: { data: number[]; color: string; w?: number; h?: number }) {
@@ -160,7 +162,7 @@ const PIPELINE = [
   { title: 'Audit Store', sub: 'SQLite Evidence record', icon: <Database size={16} color="#64748B" />, bg: '#F1F5F9', border: '#E2E8F0' },
 ];
 
-export const OverviewView: React.FC<Props> = ({
+export const OverviewView: React.FC<OverviewViewProps> = ({
   setActiveTab,
   auditEvents,
   quotaUsed: _quotaUsed,

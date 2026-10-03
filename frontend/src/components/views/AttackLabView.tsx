@@ -176,6 +176,7 @@ export const AttackLabView: React.FC<Props> = ({
   const liveStages = chatResult?.stage_latencies ?? null;
   const liveGuardRequestId = chatResult?.security?.guard?.request_id ?? researchResult?.guard_request_id ?? null;
   const liveDisagreement = researchResult ? researchResult.disagreement === 1 : (liveGuardAllowed === true && liveDecision && liveDecision !== 'ALLOW');
+  const liveMode = (chatResult?.audit_event?.execution_mode as string) || (researchResult?.execution_mode as string) || (chatResult ? 'LIVE' : researchResult ? 'SIMULATED' : null);
 
   const copyPayload = () => {
     navigator.clipboard.writeText(payload);
@@ -522,6 +523,22 @@ export const AttackLabView: React.FC<Props> = ({
                   <AlertTriangle size={12} color="#EA580C" />
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 700 }}>PrismGuard AI</span>
+                {liveMode && (
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: 800,
+                      padding: '2px 7px',
+                      borderRadius: 4,
+                      fontFamily: 'var(--font-mono)',
+                      background: liveMode === 'LIVE' ? '#DCFCE7' : liveMode === 'LOCAL_FALLBACK' ? '#FEF3C7' : '#EDE9FE',
+                      color: liveMode === 'LIVE' ? '#15803D' : liveMode === 'LOCAL_FALLBACK' ? '#B45309' : '#6D28D9',
+                      border: `1px solid ${liveMode === 'LIVE' ? '#86EFAC' : liveMode === 'LOCAL_FALLBACK' ? '#FCD34D' : '#DDD6FE'}`,
+                    }}
+                  >
+                    {liveMode === 'LOCAL_FALLBACK' ? '⚠️ LOCAL_FALLBACK' : liveMode}
+                  </span>
+                )}
                 <span style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontWeight: 600 }}>
                   {liveStages ? `${Math.round((liveStages.normalizer || 0) + (liveStages.detector || 0) + (liveStages.risk_engine || 0) + (liveStages.policy || 0))} ms` : `${(activePreset.guard_latency_ms || 0) + 28} ms (est.)`}
                 </span>

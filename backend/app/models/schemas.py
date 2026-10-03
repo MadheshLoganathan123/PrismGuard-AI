@@ -74,6 +74,7 @@ class AuditEventModel(BaseModel):
     test_id: Optional[str] = None
     input_sha256: str
     input_length: int
+    execution_mode: Optional[str] = None   # LIVE | SIMULATED | LOCAL_FALLBACK | REPLAY
     classification: str
     risk_score: int
     risk_band: RiskBand
@@ -131,6 +132,7 @@ class ResearchRunRequest(BaseModel):
 class ResearchRunResult(BaseModel):
     run_id: str
     timestamp: str
+    execution_mode: str = "SIMULATED"  # LIVE | SIMULATED
     tests_executed: int
     results: List[Dict[str, Any]]
     quota_used_in_run: int

@@ -56,6 +56,7 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
   const [decFil, setDecFil] = useState('All Decisions');
   const [riskFil, setRiskFil] = useState('All Risk Levels');
   const [clsFil, setClsFil] = useState('All Classifications');
+  const [modeFil, setModeFil] = useState('All Modes');
   const [selected, setSelected] = useState<AuditEvent | null>(auditEvents[0] || null);
   const [detailTab, setDetailTab] = useState<'overview' | 'stage' | 'signals' | 'raw'>('overview');
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
@@ -78,8 +79,9 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
     const matchR = riskFil === 'All Risk Levels' || e.risk_band === riskFil.replace(' Risk', '');
     const matchC = clsFil === 'All Classifications'
       || (e.classification || '').toLowerCase().includes(clsFil.replace(' Classifications', '').toLowerCase());
-    return matchS && matchD && matchR && matchC;
-  }), [baseRows, search, decFil, riskFil, clsFil]);
+    const matchM = modeFil === 'All Modes' || (e.execution_mode || 'LIVE') === modeFil;
+    return matchS && matchD && matchR && matchC && matchM;
+  }), [baseRows, search, decFil, riskFil, clsFil, modeFil]);
 
   const totalReqs = filtered.length;
   const totalBlocked = filtered.filter(e => e.policy_decision === 'BLOCK').length;
@@ -240,6 +242,7 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
           { val: decFil, set: setDecFil, opts: ['All Decisions', 'ALLOW', 'REVIEW', 'BLOCK', 'REDACT', 'REVIEW_GUARD_BLOCK'] },
           { val: riskFil, set: setRiskFil, opts: ['All Risk Levels', 'LOW Risk', 'MEDIUM Risk', 'HIGH Risk', 'CRITICAL Risk'] },
           { val: clsFil, set: setClsFil, opts: ['All Classifications', 'Benign', 'Injection', 'Obfuscation', 'Role Manipulation', 'Output Leakage'] },
+          { val: modeFil, set: setModeFil, opts: ['All Modes', 'LIVE', 'SIMULATED', 'LOCAL_FALLBACK', 'REPLAY'] },
         ].map((d, i) => (
           <div key={i} style={{ position: 'relative' }}>
             <select
@@ -369,6 +372,7 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
                   <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Request ID</th>
                   <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Timestamp ⇅</th>
                   <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Input SHA-256</th>
+                  <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Mode</th>
                   <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Classification</th>
                   <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Risk</th>
                   <th style={{ fontSize: 11, fontWeight: 600, color: '#64748B', padding: '10px 14px' }}>Guard Decision</th>
@@ -409,6 +413,30 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
                             {copiedHash === evt.input_sha256 ? <Check size={11} color="#059669" /> : <Copy size={11} color="#94A3B8" />}
                           </span>
                         </div>
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        {(() => {
+                          const mode = evt.execution_mode || 'LIVE';
+                          const isLive = mode === 'LIVE';
+                          const isFallback = mode === 'LOCAL_FALLBACK';
+                          const isReplay = mode === 'REPLAY';
+                          return (
+                            <span
+                              style={{
+                                fontSize: 9.5,
+                                fontWeight: 800,
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                fontFamily: 'var(--font-mono)',
+                                background: isLive ? '#ECFDF5' : isFallback ? '#FEF3C7' : isReplay ? '#F1F5F9' : '#EDE9FE',
+                                color: isLive ? '#059669' : isFallback ? '#D97706' : isReplay ? '#475569' : '#7C3AED',
+                                border: `1px solid ${isLive ? '#A7F3D0' : isFallback ? '#FDE68A' : isReplay ? '#CBD5E1' : '#DDD6FE'}`,
+                              }}
+                            >
+                              {isFallback ? 'FALLBACK' : mode}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td style={{ fontSize: 12, padding: '10px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -526,6 +554,28 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {(() => {
+                  const mode = selected.execution_mode || 'LIVE';
+                  const isLive = mode === 'LIVE';
+                  const isFallback = mode === 'LOCAL_FALLBACK';
+                  const isReplay = mode === 'REPLAY';
+                  return (
+                    <span
+                      style={{
+                        fontSize: 9.5,
+                        fontWeight: 800,
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        fontFamily: 'var(--font-mono)',
+                        background: isLive ? '#ECFDF5' : isFallback ? '#FEF3C7' : isReplay ? '#F1F5F9' : '#EDE9FE',
+                        color: isLive ? '#059669' : isFallback ? '#D97706' : isReplay ? '#475569' : '#7C3AED',
+                        border: `1px solid ${isLive ? '#A7F3D0' : isFallback ? '#FDE68A' : isReplay ? '#CBD5E1' : '#DDD6FE'}`,
+                      }}
+                    >
+                      {mode}
+                    </span>
+                  );
+                })()}
                 <span
                   style={{
                     fontSize: 9.5,
@@ -606,6 +656,12 @@ export const AuditView: React.FC<Props> = ({ auditEvents, onSelectAudit, onRefre
                     </div>
                     <div style={{ fontSize: 11, color: '#64748B' }}>
                       Total Latency: <strong style={{ color: '#0F172A' }}>{selected.total_latency_ms} ms</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Execution Mode: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{selected.execution_mode || 'LIVE'}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Tenant Scope: <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{selected.tenant_id || 'default'}</strong>
                     </div>
                   </div>
 

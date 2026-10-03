@@ -38,6 +38,9 @@ async def lifespan(app: FastAPI):
                 summary["llm"]["key_present"])
     logger.info("Max input length: %s chars | Research budget ceiling: %s calls", 
                 summary["max_input_length"], summary["guard"]["research_budget"])
+    import os
+    auth_enabled = os.getenv("PRISMGUARD_AUTH_ENABLED", "true").lower() not in ("false", "0", "no")
+    logger.info("API authentication: %s", "ENABLED" if auth_enabled else "DISABLED (dev mode)")
     
     yield
     
@@ -51,14 +54,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware for React / Vite frontend (supports all localhost ports including 5173, 5174, 5175)
+# Explicit CORS configuration — no wildcard origins, no credentials leak
+# Allowed origins are loaded from CORS_ORIGINS env var; Regex covers all localhost ports
+_ALLOWED_METHODS = ["GET", "POST", "OPTIONS"]
+_ALLOWED_HEADERS = ["Content-Type", "Authorization", "X-API-Key"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins if settings.cors_origins else ["*"],
+    allow_origins=settings.cors_origins,  # Never falls back to ["*"]; set CORS_ORIGINS in .env
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_ALLOWED_METHODS,
+    allow_headers=_ALLOWED_HEADERS,
 )
 
 # Global safe error handling

@@ -1,11 +1,12 @@
 import time
 from typing import Dict, Any, List
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.config import settings
 from app.guard.client import guard_client
 from app.llm.client import llm_client
 from app.database import get_db_connection
+from app.security.auth import AuthenticatedUser, require_viewer
 
 router = APIRouter(tags=["Health"])
 
@@ -52,7 +53,9 @@ async def health_check() -> Dict[str, Any]:
 
 
 @router.get("/api/guard/usage")
-async def get_guard_usage() -> Dict[str, Any]:
-    """Returns live Guard quota usage from the /v1/usage endpoint."""
+async def get_guard_usage(
+    user: AuthenticatedUser = Depends(require_viewer)
+) -> Dict[str, Any]:
+    """Returns live Guard quota usage from the /v1/usage endpoint. Requires: VIEWER+."""
     return await guard_client.get_usage()
 

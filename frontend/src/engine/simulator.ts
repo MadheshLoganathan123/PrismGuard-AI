@@ -1,4 +1,4 @@
-import type { AuditEvent, ChatMessage, DecisionType } from '../types';
+import type { AuditEvent, ChatMessage, DecisionType, ExecutionMode } from '../types';
 import { normalizeInput } from './normalizer';
 import { detectCustomWeakness } from './customDetector';
 import { computeRiskScore } from './riskEngine';
@@ -25,7 +25,8 @@ export interface PipelineSimulationResult {
 
 export async function runSecurityPipeline(
   input: string,
-  forcedTestCaseId?: string
+  forcedTestCaseId?: string,
+  executionMode: ExecutionMode = 'SIMULATED'
 ): Promise<PipelineSimulationResult> {
   const start = performance.now();
   const inputHash = await sha256(input);
@@ -127,6 +128,8 @@ export async function runSecurityPipeline(
     gateway_request_id: reqId,
     input_sha256: inputHash,
     test_id: matchedTest?.test_id,
+    execution_mode: executionMode,
+    tenant_id: 'default',
     classification: matchedTest?.name || (finalDecision === 'ALLOW' ? 'Benign Query' : 'Suspicious Transformation'),
     risk_score: riskEval.score,
     risk_band: riskEval.band,
@@ -146,7 +149,7 @@ export async function runSecurityPipeline(
       audit: 5
     },
     policy_rationale: policyResult.rationale,
-    request_summary: input.length > 50 ? input.substring(0, 48) + '...' : input
+    request_summary: `[REDACTED — sha256:${inputHash.substring(0, 16)}...]`
   };
 
   const message: ChatMessage = {
@@ -154,6 +157,7 @@ export async function runSecurityPipeline(
     sender: 'assistant',
     text: responseText,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    execution_mode: executionMode,
     decision: finalDecision,
     risk_score: riskEval.score,
     risk_band: riskEval.band,
